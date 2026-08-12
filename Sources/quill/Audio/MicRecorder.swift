@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Foundation
 
 /// Records the default input device to a file via AVAudioEngine, encoding AAC
@@ -31,9 +31,15 @@ final class MicRecorder: @unchecked Sendable {
     private var file: AVAudioFile?
     private var url: URL?
     private(set) var isRecording = false
+    private let timestampLock = NSLock()
+    private var capturedFirstBufferAt: Date?
     /// Wall-clock time of the first captured buffer — the track's true start,
     /// used to offset-align the two tracks' transcript timestamps.
-    private(set) var firstBufferAt: Date?
+    var firstBufferAt: Date? {
+        timestampLock.lock()
+        defer { timestampLock.unlock() }
+        return capturedFirstBufferAt
+    }
 
     // Liveness check state (voice-processing path only). Written from the tap
     // callback, read on main when deciding to fall back.
@@ -41,8 +47,8 @@ final class MicRecorder: @unchecked Sendable {
     private var livenessPeak: Float = 0
     private var livenessSettled = false
 
-    /// Start capturing the mic, encoding AAC into `url` (use a .caf extension
-    /// — CAF needs no finalization pass, so a crash loses nothing written).
+    /// Start capturing the mic, encoding AAC into `url` (use a .caf extension).
+    /// A clean stop is still required to finalize AAC packet metadata.
     func start(writingTo url: URL) throws {
         guard !isRecording else { return }
         self.url = url
@@ -153,7 +159,7 @@ final class MicRecorder: @unchecked Sendable {
         let checkFrames = Int(format.sampleRate)
         input.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, _ in
             guard let self, let file = self.file else { return }
-            if self.firstBufferAt == nil { self.firstBufferAt = Date() }
+            self.markFirstBuffer()
 
             if !self.livenessSettled {
                 let frames = Int(buffer.frameLength)
@@ -192,7 +198,7 @@ final class MicRecorder: @unchecked Sendable {
         }
         input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
             guard let self, let file = self.file else { return }
-            if self.firstBufferAt == nil { self.firstBufferAt = Date() }
+            self.markFirstBuffer()
             guard let mono = AVAudioPCMBuffer(
                 pcmFormat: monoFormat,
                 frameCapacity: buffer.frameCapacity
@@ -217,7 +223,9 @@ final class MicRecorder: @unchecked Sendable {
         engine.stop()
         engine.inputNode.removeTap(onBus: 0)
         file = nil
-        firstBufferAt = nil
+        timestampLock.lock()
+        capturedFirstBufferAt = nil
+        timestampLock.unlock()
         if let url {
             try? FileManager.default.removeItem(at: url)
         }
@@ -229,5 +237,11 @@ final class MicRecorder: @unchecked Sendable {
             ))
             file = nil
         }
+    }
+
+    private func markFirstBuffer() {
+        timestampLock.lock()
+        if capturedFirstBufferAt == nil { capturedFirstBufferAt = Date() }
+        timestampLock.unlock()
     }
 }

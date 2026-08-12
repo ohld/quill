@@ -35,13 +35,19 @@ final class SystemAudioRecorder {
     private var file: AVAudioFile?
     private let queue = DispatchQueue(label: "com.digimata.quill.system-tap")
     private(set) var isRecording = false
+    private let timestampLock = NSLock()
+    private var capturedFirstBufferAt: Date?
     /// Wall-clock time of the first captured buffer — the track's true start,
     /// used to offset-align the two tracks' transcript timestamps.
-    private(set) var firstBufferAt: Date?
+    var firstBufferAt: Date? {
+        timestampLock.lock()
+        defer { timestampLock.unlock() }
+        return capturedFirstBufferAt
+    }
 
     /// Start capturing system audio, encoding AAC into `url` (use a .caf
-    /// extension — CAF needs no finalization pass, so a crash mid-meeting
-    /// loses nothing already written).
+    /// extension). A clean stop is still required to finalize AAC packet
+    /// metadata.
     func start(writingTo url: URL) throws {
         guard !isRecording else { return }
 
@@ -138,7 +144,9 @@ final class SystemAudioRecorder {
         var status = AudioDeviceCreateIOProcIDWithBlock(&procID, aggregateID, queue) {
             [weak self] _, inInputData, _, _, _ in
             guard let self, let file = self.file else { return }
-            if self.firstBufferAt == nil { self.firstBufferAt = Date() }
+            self.timestampLock.lock()
+            if self.capturedFirstBufferAt == nil { self.capturedFirstBufferAt = Date() }
+            self.timestampLock.unlock()
             guard let buffer = AVAudioPCMBuffer(
                 pcmFormat: format,
                 bufferListNoCopy: inInputData,

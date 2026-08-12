@@ -7,9 +7,37 @@ struct Quill: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "quill",
         abstract: "Local meeting recorder + transcriber. Records mic and system audio as two tracks, then transcribes on-device.",
-        subcommands: [Run.self, Doctor.self, Install.self],
+        subcommands: [Run.self, RecordOnce.self, Doctor.self, Install.self],
         defaultSubcommand: Run.self
     )
+}
+
+/// Scriptable one-shot recording, also useful for verifying permissions and
+/// the complete recording pipeline without clicking the menu bar. The normal
+/// launch agent picks the finished session up and transcribes it on restart.
+struct RecordOnce: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "record",
+        abstract: "Record mic and system audio for a fixed duration, then exit."
+    )
+
+    @Option(name: .long, help: "Recording duration in seconds.")
+    var seconds: Double = 10
+
+    @Option(name: .long, help: "Recordings root directory (overrides the config file).")
+    var out: String?
+
+    func run() throws {
+        guard seconds >= 1 else { throw ValidationError("--seconds must be at least 1") }
+        let session = try RecordingSession(root: Config.resolveRoot(cliOverride: out))
+        try session.start()
+        FileHandle.standardError.write(Data(
+            "● recording \(seconds)s → \(session.dir.path)\n".utf8
+        ))
+        Thread.sleep(forTimeInterval: seconds)
+        session.stop()
+        print(session.dir.path)
+    }
 }
 
 struct Run: ParsableCommand {
@@ -20,6 +48,9 @@ struct Run: ParsableCommand {
 
     @Option(name: .long, help: "Recordings root directory (overrides the config file).")
     var out: String?
+
+    @Flag(name: .long, help: "Start recording as soon as the tray app launches.")
+    var startRecording = false
 
     func run() throws {
         // ArgumentParser invokes run() on the main thread; promote that fact
@@ -42,21 +73,37 @@ struct Run: ParsableCommand {
 
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
+        // SwiftPM command-line entry points do not have an application
+        // delegate to complete AppKit launch for them. Finish launching before
+        // creating the NSStatusItem so macOS reliably publishes it.
+        app.finishLaunching()
 
         let controller = AppController(root: root)
-
-        let sigint = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
-        sigint.setEventHandler {
-            FileHandle.standardError.write(Data("\nshutting down\n".utf8))
-            MainActor.assumeIsolated { controller.shutdown() }
+        if startRecording {
+            controller.startRecording()
         }
-        sigint.resume()
-        signal(SIGINT, SIG_IGN)
+
+        let shutdownSignals = [SIGINT, SIGTERM, SIGHUP]
+        let signalSources = shutdownSignals.map { signalNumber in
+            signal(signalNumber, SIG_IGN)
+            let source = DispatchSource.makeSignalSource(signal: signalNumber, queue: .main)
+            source.setEventHandler {
+                FileHandle.standardError.write(Data("\nshutting down cleanly\n".utf8))
+                MainActor.assumeIsolated { controller.shutdown() }
+            }
+            source.resume()
+            return source
+        }
 
         FileHandle.standardError.write(Data(
             "quill up · recordings → \(root.path) · ^C to quit\n".utf8
         ))
-        app.run()
+        // Keep every signal source alive for the full AppKit run loop. This
+        // lets launchd logout/update termination finalize AAC packet tables
+        // just like the tray's Stop/Quit actions.
+        withExtendedLifetime(signalSources) {
+            app.run()
+        }
     }
 }
 
@@ -88,8 +135,10 @@ final class AppController {
         self.root = root
         menuBar.onToggle = { [weak self] in self?.toggle() }
         menuBar.onOpenFolder = { [weak self] in self?.openFolder() }
+        menuBar.onOpenLatestTranscript = { [weak self] in self?.openLatestTranscript() }
         menuBar.onQuit = { [weak self] in self?.shutdown() }
         menuBar.update(recording: false, elapsed: nil)
+        menuBar.updateSources(recording: false, micActive: false, systemActive: false)
 
         Task { [transcription, root] in
             await transcription.setStatusHandler { status in
@@ -105,6 +154,11 @@ final class AppController {
     func shutdown() {
         stopSession()
         NSApp.terminate(nil)
+    }
+
+    func startRecording() {
+        guard session == nil else { return }
+        startSession()
     }
 
     private func toggle() {
@@ -128,6 +182,7 @@ final class AppController {
         }
 
         menuBar.update(recording: true, elapsed: "0:00")
+        menuBar.updateSources(recording: true, micActive: false, systemActive: false)
         ticker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
@@ -144,6 +199,7 @@ final class AppController {
         ticker?.invalidate()
         ticker = nil
         menuBar.update(recording: false, elapsed: nil)
+        menuBar.updateSources(recording: false, micActive: false, systemActive: false)
 
         let dir = session.dir
         Task { [transcription] in await transcription.enqueue(dir) }
@@ -168,11 +224,25 @@ final class AppController {
             recording: true,
             elapsed: Self.format(Date().timeIntervalSince(session.startedAt))
         )
+        menuBar.updateSources(
+            recording: true,
+            micActive: session.micHasAudio,
+            systemActive: session.systemHasAudio
+        )
     }
 
     private func openFolder() {
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         NSWorkspace.shared.open(root)
+    }
+
+    private func openLatestTranscript() {
+        let latest = root.appendingPathComponent("latest-transcript.md")
+        guard FileManager.default.fileExists(atPath: latest.path) else {
+            notifyUser(title: "quill — no transcript yet", body: "Finish a recording first")
+            return
+        }
+        NSWorkspace.shared.open(latest)
     }
 
     private static func format(_ interval: TimeInterval) -> String {

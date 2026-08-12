@@ -3,7 +3,10 @@ import PackageDescription
 
 let package = Package(
     name: "quill",
-    platforms: [.macOS(.v15)],
+    // Core Audio process taps shipped in macOS 14.2. Keeping the deployment
+    // target at the actual API floor lets quill run on this Mac (14.7) while
+    // still rejecting older systems that cannot capture system audio.
+    platforms: [.macOS("14.2")],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
         .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.7.0"),
@@ -27,6 +30,10 @@ let package = Package(
                     "-Xlinker", "Sources/quill/Info.plist",
                 ]),
             ]
+        ),
+        .testTarget(
+            name: "quillTests",
+            dependencies: ["quill"]
         ),
     ]
 )

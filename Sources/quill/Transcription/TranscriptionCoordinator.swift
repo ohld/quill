@@ -102,6 +102,7 @@ actor TranscriptionCoordinator {
         let engine = try await preparedEngine()
 
         var merged: [Transcript.Segment] = []
+        var successfulTracks = 0
         for track in meta.tracks {
             let audio = dir.appendingPathComponent(track.file)
             guard FileManager.default.fileExists(atPath: audio.path) else {
@@ -114,6 +115,7 @@ actor TranscriptionCoordinator {
             let segments: [TranscriptSegment]
             do {
                 segments = try await engine.transcribe(audio)
+                successfulTracks += 1
             } catch {
                 log(dir, "skipping \(track.file): \(error)")
                 continue
@@ -121,14 +123,32 @@ actor TranscriptionCoordinator {
             let offset = TimeInterval(track.offsetMs) / 1000
             merged += segments.map {
                 Transcript.Segment(
-                    speaker: track.speaker,
+                    speaker: $0.speaker.map { "\(track.speaker) · \($0)" } ?? track.speaker,
                     start_ms: Int(($0.start + offset) * 1000),
                     end_ms: Int(($0.end + offset) * 1000),
                     text: $0.text
                 )
             }
         }
+        guard successfulTracks > 0 else {
+            throw TranscriptionFailure.allTracksFailed
+        }
         merged.sort { $0.start_ms < $1.start_ms }
+
+        if Config.transcriptEchoFilter() {
+            let before = merged.count
+            merged = EchoFilter.dropEchoes(
+                merged,
+                micSpeaker: Config.speakerName(for: "mic"),
+                systemSpeaker: Config.speakerName(for: "system")
+            )
+            if merged.count != before {
+                log(
+                    dir,
+                    "echo filter dropped \(before - merged.count) mic segment(s) duplicating system audio"
+                )
+            }
+        }
 
         let transcript = Transcript(
             engine: engine.name,
@@ -137,21 +157,36 @@ actor TranscriptionCoordinator {
             segments: merged
         )
         try transcript.write(to: dir)
-        log(dir, "done — \(merged.count) segments")
+        let utterances = UtteranceGrouper.group(merged).count
+        log(dir, "done — \(merged.count) segments, \(utterances) readable utterances")
     }
 
     private func preparedEngine() async throws -> TranscriptionEngine {
         if let engine { return engine }
         let configured = Config.transcriptionEngine()
-        if configured != "parakeet" {
+        let engine: TranscriptionEngine
+        switch configured {
+        case "spokenly":
+            engine = SpokenlyEngine()
+        case "parakeet":
+            engine = ParakeetEngine()
+        default:
             FileHandle.standardError.write(Data(
                 "warning: unknown transcription engine \"\(configured)\" — using parakeet\n".utf8
             ))
+            engine = ParakeetEngine()
         }
-        let engine = ParakeetEngine()
         try await engine.prepare()
         self.engine = engine
         return engine
+    }
+
+    private enum TranscriptionFailure: Error, CustomStringConvertible {
+        case allTracksFailed
+
+        var description: String {
+            "all available audio tracks failed; leaving the session pending for retry"
+        }
     }
 
     /// Fires the configured on_stop shell command with the session directory
@@ -220,10 +255,18 @@ private struct SessionMeta {
         let offsets = json["start_offset_ms"] as? [String: Int] ?? [:]
         var tracks: [Track] = []
         if let mic = files["mic"] {
-            tracks.append(Track(file: mic, speaker: "me", offsetMs: offsets["mic"] ?? 0))
+            tracks.append(Track(
+                file: mic,
+                speaker: Config.speakerName(for: "mic"),
+                offsetMs: offsets["mic"] ?? 0
+            ))
         }
         if let system = files["system"] {
-            tracks.append(Track(file: system, speaker: "them", offsetMs: offsets["system"] ?? 0))
+            tracks.append(Track(
+                file: system,
+                speaker: Config.speakerName(for: "system"),
+                offsetMs: offsets["system"] ?? 0
+            ))
         }
         return SessionMeta(tracks: tracks)
     }
@@ -231,7 +274,7 @@ private struct SessionMeta {
 
 /// Canonical transcript. Property names are the JSON schema — this struct
 /// exists to be serialized.
-private struct Transcript: Codable {
+struct Transcript: Codable {
     struct Segment: Codable {
         let speaker: String
         let start_ms: Int
@@ -244,21 +287,30 @@ private struct Transcript: Codable {
     let created_at: String
     let segments: [Segment]
 
-    /// Write transcript.json and render transcript.md. Both writes are atomic
-    /// (temp file + rename), so a partially written transcript never exists on
-    /// disk — resumePending treats presence of transcript.json as "done".
+    /// Write the readable transcript, update the stable latest-transcript.md,
+    /// then write transcript.json last as the completion marker. Every write
+    /// is atomic, so resumePending never mistakes a half-finished job for done.
     func write(to dir: URL) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(self)
-            .write(to: dir.appendingPathComponent("transcript.json"), options: .atomic)
-        try Data(rendered(title: dir.lastPathComponent).utf8)
-            .write(to: dir.appendingPathComponent("transcript.md"), options: .atomic)
+        let markdown = Data(rendered(title: dir.lastPathComponent).utf8)
+        try markdown.write(
+            to: dir.appendingPathComponent("transcript.md"),
+            options: .atomic
+        )
+        try markdown.write(
+            to: dir.deletingLastPathComponent().appendingPathComponent("latest-transcript.md"),
+            options: .atomic
+        )
+        try encoder.encode(self).write(
+            to: dir.appendingPathComponent("transcript.json"),
+            options: .atomic
+        )
     }
 
     private func rendered(title: String) -> String {
         var lines = ["# \(title)", "", "engine: \(engine) (\(model))", ""]
-        for seg in segments {
+        for seg in UtteranceGrouper.group(segments) {
             lines.append("**[\(Self.clock(seg.start_ms))] \(seg.speaker):** \(seg.text)")
             lines.append("")
         }

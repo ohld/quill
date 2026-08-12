@@ -3,13 +3,17 @@ import Foundation
 /// One meeting recording: a timestamped folder holding two independent tracks
 /// (mic = you, system = them) plus a meta.json written on clean stop. Tracks
 /// are separate on purpose — whisper does better on clean single-source audio,
-/// and two tracks give free two-party diarization.
+/// and two tracks give free two-party diarization. Always stop cleanly so
+/// AVAudioFile can finalize the AAC-in-CAF packet table.
 final class RecordingSession {
     let dir: URL
     let startedAt = Date()
 
     private let mic = MicRecorder()
     private let system = SystemAudioRecorder()
+
+    var micHasAudio: Bool { mic.firstBufferAt != nil }
+    var systemHasAudio: Bool { system.firstBufferAt != nil }
 
     private static let folderFormat: DateFormatter = {
         let f = DateFormatter()

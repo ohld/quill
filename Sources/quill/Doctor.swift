@@ -86,15 +86,30 @@ enum DoctorReport {
                 remediation: nil
             )
         }
-        let cache = AsrModels.defaultCacheDirectory(for: .v2)
-        if AsrModels.modelsExist(at: cache, version: .v2) {
-            return Check(name: "transcription", status: .ok, remediation: nil)
+        if Config.transcriptionEngine() == "spokenly" {
+            guard let cli = Config.spokenlyCLIPath() else {
+                return Check(
+                    name: "transcription",
+                    status: .fail("Spokenly CLI not found"),
+                    remediation: "Spokenly → Settings → Advanced → Install CLI"
+                )
+            }
+            return Check(
+                name: "transcription",
+                status: .ok,
+                remediation: "Spokenly CLI: \(cli); keep Spokenly.app running"
+            )
+        } else {
+            let cache = AsrModels.defaultCacheDirectory(for: .v3)
+            if AsrModels.modelsExist(at: cache, version: .v3) {
+                return Check(name: "transcription", status: .ok, remediation: nil)
+            }
+            return Check(
+                name: "transcription",
+                status: .warn("multilingual parakeet v3 models not downloaded (~500 MB)"),
+                remediation: "downloads automatically on first transcription — record a short test session while online"
+            )
         }
-        return Check(
-            name: "transcription",
-            status: .warn("parakeet models not downloaded (~600 MB)"),
-            remediation: "downloads automatically on first transcription — record a short test session while online"
-        )
     }
 
     static func print(_ checks: [Check]) {

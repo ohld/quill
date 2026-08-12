@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>com.digimata.quill</string>
+    <string>com.ohld.quill</string>
     <key>CFBundleName</key>
     <string>quill</string>
     <key>NSMicrophoneUsageDescription</key>

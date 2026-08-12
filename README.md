@@ -1,36 +1,40 @@
 # quill
 
-A minimal, fully local macOS meeting recorder + transcriber. One menu-bar
+A minimal, local-first macOS meeting recorder + transcriber. One menu-bar
 click records your mic and all system audio as two separate tracks; when you
-stop, quill transcribes both on-device and writes a speaker-tagged transcript.
-Nothing ever leaves the machine.
+stop, quill transcribes both and writes a speaker-tagged transcript. The
+built-in engine stays on-device; the Spokenly engine is local when Spokenly's
+Local file model is selected and diarization is disabled.
 
-Named for the feather. Sibling of [parrot](https://github.com/digimata/parrot), same skeleton: single
-Swift binary, menu-bar tray, no app bundle.
+Named for the feather. Sibling of [parrot](https://github.com/digimata/parrot),
+with a single Swift executable packaged as a signed menu-bar app.
 
 ## Install
 
 ```sh
-cd quill
-swift build -c release
-sudo cp .build/release/quill /usr/local/bin/quill
-quill install --launch-at-login   # optional — runs in the background on login
+./Scripts/install-app.sh
 ```
 
-**Requires:** macOS 15+ (Core Audio process taps for system audio — no
+This builds and ad-hoc signs `~/Applications/Quill.app`, then installs its
+LaunchAgent. No administrator password is required. Grant Quill Microphone and
+System Audio Recording access on first use.
+
+**Requires:** macOS 14.2+ (Core Audio process taps for system audio — no
 virtual device, no kernel extension). Apple Silicon recommended for
 transcription speed.
 
 ## How to use
 
-1. **Run it** (`quill` in a terminal, or the LaunchAgent).
+1. **Run it** (open `~/Applications/Quill.app`, or let its LaunchAgent start it
+   at login).
 2. **Click the feather in the menu bar → Start recording.** First use prompts
    for microphone and System Audio Recording permissions. While recording, the
-   icon turns red with a running elapsed counter, and macOS shows the purple
-   recording indicator.
+   feather becomes red, macOS shows the purple recording
+   indicator, and the menu shows elapsed time plus live mic/system-audio status.
 3. **Click → Stop recording** when the meeting ends. Transcription starts
    automatically (the menu shows progress); a notification fires when the
-   transcript is ready.
+   transcript is ready. **Open latest transcript** in the menu opens the stable
+   `~/Recordings/latest-transcript.md` file for the most recent completed call.
 
 Each session lands in `~/Recordings/<yyyy.MM.dd-HHmm>/`:
 
@@ -43,27 +47,40 @@ Each session lands in `~/Recordings/<yyyy.MM.dd-HHmm>/`:
 | `transcript.md` | the same transcript rendered for reading |
 | `transcribe.log` | transcription progress/errors for this session |
 
+The recordings root also contains `latest-transcript.md`: an atomically
+updated copy of the newest readable transcript, intended as the one stable
+path to hand to another agent or workflow.
+
 Two tracks on purpose: speech models do better on clean single-source audio,
 and mic-vs-system is free two-party diarization — `me` vs `them` with no
-speaker-identification model. CAF on purpose: unlike m4a, it needs no
-finalization pass — if the process dies mid-meeting, everything already
-written is still readable.
+speaker-identification model. AAC is streamed into CAF to keep long meetings
+compact. Stop the recording cleanly: the encoder writes the CAF packet table
+on close, and external tools cannot reliably read an actively written file.
 
 ## Transcription
 
-Built in, on-device, automatic. The default engine is **Parakeet TDT 0.6B v2**
-(English) via [FluidAudio](https://github.com/FluidInference/FluidAudio)'s
-Core ML port — roughly 20 seconds per hour of audio on Apple Silicon. Models
-(~600 MB) download once on first transcription; `quill doctor` tells you
-whether they're already cached so you're never downloading after an important
-meeting.
+Built in, on-device, automatic. This private fork defaults to **Parakeet TDT
+0.6B v3** via FluidAudio: multilingual (including Russian), fully local, and
+very fast on Apple Silicon. The model is already cached on this Mac.
+
+The optional official **Spokenly CLI** engine uses the single file-
+transcription model selected in Spokenly.app for both tracks. Select Local →
+NVIDIA Parakeet TDT 0.6B V3 in Spokenly's Transcribe File model picker for
+private multilingual transcription. Spokenly.app must be installed and
+configured; quill launches it automatically when this engine starts. Spokenly
+speaker diarization is opt-in because requesting it currently switches file
+transcription to an online Whisper route.
 
 Each track is transcribed separately, shifted by its start offset so both
-share one clock, and merged by timestamp. Jobs run in a serial queue — you can
-start a new recording while the last one transcribes. Unfinished jobs resume
-on next launch (the filesystem is the queue: a session with `meta.json` but no
-`transcript.json` is pending). Failures append to the session's
-`transcribe.log` and never block later jobs.
+share one clock, and merged by timestamp. A Unicode-aware echo filter removes
+remote speech that the raw MacBook mic heard from the speakers, so it does not
+appear once as `mic` and again as `system`. Fine-grained timings stay in JSON;
+word-level ASR output is grouped into sentence-sized, role-labelled blocks in
+the Markdown file. Jobs run in a serial queue — you can start a new recording
+while the last one transcribes. Unfinished jobs resume on next launch (the
+filesystem is the queue: a session with `meta.json` but no `transcript.json` is
+pending). Failures append to the session's `transcribe.log` and never block
+later jobs.
 
 The engine sits behind a small protocol; a Whisper engine (WhisperKit
 large-v3-turbo) is planned as the fallback / re-transcription option.
@@ -75,7 +92,14 @@ Optional, at `~/.config/quill/config.json`:
 ```json
 {
   "recordings_dir": "~/Recordings",
-  "transcription": { "enabled": true, "engine": "parakeet" },
+  "transcription": {
+    "enabled": true,
+    "engine": "parakeet",
+    "spokenly_cli": "/usr/local/bin/spokenly",
+    "diarize_system_audio": false
+  },
+  "speaker_names": { "mic": "Dan", "system": "Remote" },
+  "transcript_echo_filter": true,
   "on_stop": "my-hook"
 }
 ```
@@ -83,12 +107,23 @@ Optional, at `~/.config/quill/config.json`:
 - `recordings_dir` — where sessions land. Resolution order: `--out` flag >
   config > `~/Recordings`.
 - `transcription.enabled` — set `false` to just record.
+- `transcription.engine` — `parakeet` (fully local multilingual default) or
+  `spokenly` (uses Spokenly's active file model).
+- `transcription.spokenly_cli` — optional explicit CLI path. The standard
+  `/usr/local/bin/spokenly` installation is detected automatically.
+- `transcription.diarize_system_audio` — let Spokenly split remote speakers.
+  Disabled by default because Spokenly 2.27 routes `--speakers` through an
+  online Whisper service even when local Parakeet is selected.
+- `speaker_names` — labels for the dedicated mic and system tracks.
 - `mic_voice_processing` — Apple's echo cancellation on the mic (default off).
   Set `true` when recording meetings through the speakers, so playback doesn't
   bleed into the mic track and get transcribed twice as "me". The trade: while
   the voice unit is live, macOS ducks other playback slightly (`.min` ducking
   is configured, but it can't be zeroed). On headphones there's no echo to
   cancel, so raw capture is the better default.
+- `transcript_echo_filter` — remove mic words that duplicate overlapping
+  system speech (default on). Keep it on for laptop-speaker calls; it is a
+  no-op when the mic does not contain system playback.
 - `on_stop` — shell command spawned with the session directory as its
   argument, **after the transcript is written** (or right after recording if
   transcription is disabled). Wire it to whatever comes next: summarization,
@@ -99,6 +134,8 @@ Optional, at `~/.config/quill/config.json`:
 ```sh
 quill                        # run the menu-bar daemon (^C to quit)
 quill run --out <dir>        # custom recordings root (default ~/Recordings)
+quill run --start-recording  # launch the tray and begin immediately
+quill record --seconds 10    # one-shot recording for scripts / smoke tests
 quill doctor                 # check permissions, recordings folder, models
 quill install --launch-at-login
 quill install --uninstall
@@ -121,7 +158,13 @@ quill install --uninstall
   per-process picker if it bothers you).
 - If recordings come out silent, check System Settings → Privacy & Security →
   Screen & System Audio Recording.
-- Parakeet v2 is English-only. Other languages will come with the Whisper
-  engine.
+- macOS can hide status items when the right side of a notched menu bar is
+  full. Quill uses a compact square item; if it is still absent, hide or move
+  one existing menu extra to make room.
+- Spokenly's active Transcribe File model controls language coverage and is
+  shared by both tracks. A downloaded model is not necessarily selected: for
+  fully local operation choose the Local tab explicitly. This setup uses local
+  `parakeetTDT06` (NVIDIA Parakeet TDT 0.6B V3) for Russian, with Spokenly
+  diarization disabled so it does not switch to the online Whisper route.
 - The binary embeds its Info.plist (`__TEXT,__info_plist`) so TCC can
   attribute permissions to quill itself when running as a LaunchAgent.

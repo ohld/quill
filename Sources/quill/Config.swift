@@ -4,8 +4,15 @@ import Foundation
 ///
 ///     {
 ///       "recordings_dir": "~/Recordings",
-///       "transcription": { "enabled": true, "engine": "parakeet" },
+///       "transcription": {
+///         "enabled": true,
+///         "engine": "parakeet",
+///         "spokenly_cli": "/usr/local/bin/spokenly",
+///         "diarize_system_audio": false
+///       },
+///       "speaker_names": { "mic": "me", "system": "them" },
 ///       "mic_voice_processing": true,
+///       "transcript_echo_filter": true,
 ///       "on_stop": "my-hook"
 ///     }
 ///
@@ -38,10 +45,48 @@ enum Config {
         transcription()?["enabled"] as? Bool ?? true
     }
 
-    /// Configured engine name. Only "parakeet" ships today; the coordinator
-    /// warns and falls back for anything else.
+    /// Configured engine name. FluidAudio Parakeet v3 is the safe default:
+    /// multilingual, fully local, and independent of Spokenly UI state.
     static func transcriptionEngine() -> String {
         transcription()?["engine"] as? String ?? "parakeet"
+    }
+
+    /// Resolve the Spokenly CLI explicitly rather than relying only on PATH.
+    /// LaunchAgents inherit a deliberately sparse PATH and would otherwise
+    /// miss the standard /usr/local/bin symlink installed by Spokenly.app.
+    static func spokenlyCLIPath() -> String? {
+        if let configured = transcription()?["spokenly_cli"] as? String, !configured.isEmpty {
+            let expanded = (configured as NSString).expandingTildeInPath
+            return FileManager.default.isExecutableFile(atPath: expanded) ? expanded : nil
+        }
+
+        let candidates = [
+            "/usr/local/bin/spokenly",
+            "/opt/homebrew/bin/spokenly",
+        ]
+        if let found = candidates.first(where: FileManager.default.isExecutableFile(atPath:)) {
+            return found
+        }
+
+        let path = ProcessInfo.processInfo.environment["PATH"] ?? ""
+        for directory in path.split(separator: ":") {
+            let candidate = URL(fileURLWithPath: String(directory))
+                .appendingPathComponent("spokenly").path
+            if FileManager.default.isExecutableFile(atPath: candidate) { return candidate }
+        }
+        return nil
+    }
+
+    /// Spokenly's speaker diarization is useful on the system track, where a
+    /// meeting can contain several remote participants. The mic track is
+    /// already a clean, single-speaker recording and does not need it.
+    static func diarizeSystemAudio() -> Bool {
+        transcription()?["diarize_system_audio"] as? Bool ?? false
+    }
+
+    static func speakerName(for track: String) -> String {
+        let names = load()?["speaker_names"] as? [String: String]
+        return names?[track] ?? (track == "mic" ? "me" : "them")
     }
 
     private static func transcription() -> [String: Any]? {
@@ -55,6 +100,13 @@ enum Config {
     /// recording meetings through the speakers.
     static func micVoiceProcessing() -> Bool {
         load()?["mic_voice_processing"] as? Bool ?? false
+    }
+
+    /// Drop mic words that duplicate overlapping system speech. This is the
+    /// text-level fallback for raw mic capture through laptop speakers, where
+    /// the far end is otherwise labelled as both participants.
+    static func transcriptEchoFilter() -> Bool {
+        load()?["transcript_echo_filter"] as? Bool ?? true
     }
 
     /// Parse the config file. A malformed config is reported on stderr rather
