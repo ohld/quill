@@ -3,8 +3,8 @@
 A minimal, local-first macOS meeting recorder + transcriber. One menu-bar
 click records your mic and all system audio as two separate tracks; when you
 stop, quill transcribes both and writes a speaker-tagged transcript. The
-built-in engine stays on-device; the Spokenly engine is local when Spokenly's
-Local file model is selected and diarization is disabled.
+built-in engine stays on-device; the optional Spokenly engine follows
+Spokenly's mutable File Transcription choice and can be local or cloud.
 
 Named for the feather. Sibling of [parrot](https://github.com/digimata/parrot),
 with a single Swift executable packaged as a signed menu-bar app.
@@ -59,7 +59,7 @@ on close, and external tools cannot reliably read an actively written file.
 
 ## Transcription
 
-Built in, on-device, automatic. This private fork defaults to **Parakeet TDT
+Built in, on-device, automatic. This fork defaults to **Parakeet TDT
 0.6B v3** via FluidAudio: multilingual (including Russian), fully local, and
 very fast on Apple Silicon. The model is already cached on this Mac.
 
@@ -68,8 +68,9 @@ transcription model selected in Spokenly.app for both tracks. Select Local →
 NVIDIA Parakeet TDT 0.6B V3 in Spokenly's Transcribe File model picker for
 private multilingual transcription. Spokenly.app must be installed and
 configured; quill launches it automatically when this engine starts. Spokenly
-speaker diarization is opt-in because requesting it currently switches file
-transcription to an online Whisper route.
+speaker diarization is opt-in. On the current local file route it uses local
+Pyannote, but it is unnecessary for the two physical tracks and its runtime
+and model choice are controlled by Spokenly rather than quill.
 
 Each track is transcribed separately, shifted by its start offset so both
 share one clock, and merged by timestamp. A Unicode-aware echo filter removes
@@ -112,8 +113,9 @@ Optional, at `~/.config/quill/config.json`:
 - `transcription.spokenly_cli` — optional explicit CLI path. The standard
   `/usr/local/bin/spokenly` installation is detected automatically.
 - `transcription.diarize_system_audio` — let Spokenly split remote speakers.
-  Disabled by default because Spokenly 2.27 routes `--speakers` through an
-  online Whisper service even when local Parakeet is selected.
+  Disabled by default because it is useful only when several remote people
+  share the system track. Its labels are anonymous speaker IDs, not voice
+  identities or names from a meeting roster.
 - `speaker_names` — labels for the dedicated mic and system tracks.
 - `mic_voice_processing` — Apple's echo cancellation on the mic (default off).
   Set `true` when recording meetings through the speakers, so playback doesn't
@@ -151,6 +153,22 @@ quill install --uninstall
 - **FluidAudio / Parakeet** — on-device Core ML transcription
 - **NSStatusItem** — the whole UI
 
+## Licensing and public forks
+
+The source remains MIT and preserves the upstream copyright notice. See
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) and
+[`MODEL_NOTICES.md`](MODEL_NOTICES.md); the installer copies the full required
+license texts into the app bundle.
+
+This is an independent fork and is not affiliated with Andrew Jones,
+Quill Notes, NVIDIA, FluidInference, Lucide, or Spokenly. Before a public
+release, use a new clearance-checked product name: another Mac meeting
+recorder already uses the `Quill` name. See [`ROADMAP.md`](ROADMAP.md).
+
+Recording laws and workplace policies vary. Obtain any consent required for
+recording, transcription, or cloud processing, and protect recordings and
+transcripts as sensitive data.
+
 ## Gotchas
 
 - A global tap records *everything* the Mac plays — notification dings,
@@ -163,8 +181,10 @@ quill install --uninstall
   one existing menu extra to make room.
 - Spokenly's active Transcribe File model controls language coverage and is
   shared by both tracks. A downloaded model is not necessarily selected: for
-  fully local operation choose the Local tab explicitly. This setup uses local
-  `parakeetTDT06` (NVIDIA Parakeet TDT 0.6B V3) for Russian, with Spokenly
-  diarization disabled so it does not switch to the online Whisper route.
+  a fully local optional Spokenly route choose Local → `parakeetTDT06`
+  (NVIDIA Parakeet TDT 0.6B V3) explicitly. Spokenly's general Local-only mode
+  must be enabled separately if the entire Spokenly application must be
+  prevented from using the network. The default built-in engine is independent
+  of all Spokenly settings.
 - The binary embeds its Info.plist (`__TEXT,__info_plist`) so TCC can
   attribute permissions to quill itself when running as a LaunchAgent.

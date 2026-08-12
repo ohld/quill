@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreML
 import FluidAudio
 import Foundation
 
@@ -29,7 +30,16 @@ actor ParakeetEngine: TranscriptionEngine {
 
     func prepare() async throws {
         guard manager == nil else { return }
-        let models = try await AsrModels.downloadAndLoad(version: .v3)
+        // The default FluidAudio route runs the large conformer encoder on
+        // Apple's Neural Engine. On this Mac, ANE's asynchronous runtime can
+        // time out (`Encoder_main...CancelTimedOutAsyncTask`) on long meeting
+        // tracks. FluidAudio explicitly supports the GPU encoder path; it is
+        // WER-neutral, faster on Apple Silicon, and avoids that E5RT failure.
+        // The small decoder/joint models keep FluidAudio's normal settings.
+        let models = try await AsrModels.downloadAndLoad(
+            version: .v3,
+            encoderComputeUnits: .cpuAndGPU
+        )
         let manager = AsrManager()
         try await manager.loadModels(models)
         self.manager = manager
