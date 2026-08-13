@@ -143,9 +143,10 @@ final class MenuBarController {
     }
 
     func showCompletion(sessionDir: URL) {
+        let presentation = TranscriptNotificationPresentation.load(from: sessionDir)
         showPopover(
             title: "Транскрипт готов",
-            detail: sessionDir.lastPathComponent,
+            detail: presentation.subtitle,
             buttonTitle: "Открыть в Finder",
             dismissAfter: 5
         ) { [weak self] in
@@ -157,6 +158,16 @@ final class MenuBarController {
         showPopover(
             title: "Не удалось расшифровать",
             detail: "\(sessionName) · подробности в transcribe.log",
+            buttonTitle: nil,
+            dismissAfter: 8,
+            onAction: nil
+        )
+    }
+
+    func showMessage(title: String, detail: String) {
+        showPopover(
+            title: title,
+            detail: detail,
             buttonTitle: nil,
             dismissAfter: 8,
             onAction: nil

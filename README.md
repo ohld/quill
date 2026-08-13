@@ -32,10 +32,13 @@ transcription speed.
    feather becomes red, macOS shows the purple recording
    indicator, and the menu shows elapsed time plus live mic/system-audio status.
 3. **Click → Stop recording** when the meeting ends. Transcription starts
-   automatically (the menu shows progress). A compact popover attached to the
-   feather offers **Open in Finder** when the transcript is ready, then closes
-   itself after five seconds. **Open latest transcript** in the menu opens the
-   stable `~/Recordings/latest-transcript.md` file for the most recent call.
+   automatically (the menu shows progress). A native Quill notification shows
+   the recording start time, a transcript preview, and **Open in Finder** when
+   the transcript is ready. If macOS notifications are unavailable, a compact
+   popover attached to the feather provides the same Finder action instead;
+   the two are never shown together. **Open latest transcript** in the menu
+   opens the stable `~/Recordings/latest-transcript.md` file for the most
+   recent call.
 
 Each session lands in `~/Recordings/<yyyy.MM.dd-HHmm>/`:
 
@@ -180,6 +183,9 @@ transcripts as sensitive data.
 - macOS can hide status items when the right side of a notched menu bar is
   full. Quill uses a compact square item; if it is still absent, hide or move
   one existing menu extra to make room.
+- A Focus can silence an otherwise authorized notification. Add Quill to
+  **Allowed Apps** for each Focus in which transcript-ready banners should
+  appear; macOS does not let an app grant itself that exception.
 - Spokenly's active Transcribe File model controls language coverage and is
   shared by both tracks. A downloaded model is not necessarily selected: for
   a fully local optional Spokenly route choose Local → `parakeetTDT06`

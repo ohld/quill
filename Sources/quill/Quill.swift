@@ -136,6 +136,7 @@ struct Doctor: ParsableCommand {
 final class AppController {
     private let root: URL
     private let menuBar = MenuBarController()
+    private let notifications = TranscriptNotificationController()
     private let transcription = TranscriptionCoordinator()
     private var session: RecordingSession?
     private var ticker: Timer?
@@ -148,6 +149,9 @@ final class AppController {
         menuBar.onOpenLatestTranscript = { [weak self] in self?.openLatestTranscript() }
         menuBar.onQuit = { [weak self] in self?.shutdown() }
         menuBar.onOpenRecording = { [weak self] dir in self?.openRecording(dir) }
+        Task { [notifications] in
+            await notifications.requestAuthorizationIfNeeded()
+        }
         menuBar.update(recording: false, elapsed: nil)
         menuBar.updateSources(recording: false, micActive: false, systemActive: false)
 
@@ -192,7 +196,10 @@ final class AppController {
             FileHandle.standardError.write(Data("● recording → \(newSession.dir.path)\n".utf8))
         } catch {
             FileHandle.standardError.write(Data("recording start failed: \(error)\n".utf8))
-            notifyUser(title: "quill — recording failed", body: "\(error)")
+            menuBar.showMessage(
+                title: "Не удалось начать запись",
+                detail: "\(error)"
+            )
             return
         }
 
@@ -226,7 +233,18 @@ final class AppController {
             menuBar.updateTranscription(nil)
             if let name = transcribingSessionName {
                 transcribingSessionName = nil
-                menuBar.showCompletion(sessionDir: root.appendingPathComponent(name))
+                let dir = root.appendingPathComponent(name)
+                Task { @MainActor [weak self, dir] in
+                    guard let self else { return }
+                    let nativeAccepted = await self.notifications.notifyTranscriptReady(
+                        sessionDir: dir
+                    )
+                    if TranscriptCompletionRoute.resolve(
+                        nativeNotificationAccepted: nativeAccepted
+                    ) == .trayFallback {
+                        self.menuBar.showCompletion(sessionDir: dir)
+                    }
+                }
             }
         case .transcribing(let name, let queued):
             transcribingSessionName = name
@@ -262,7 +280,10 @@ final class AppController {
     private func openLatestTranscript() {
         let latest = root.appendingPathComponent("latest-transcript.md")
         guard FileManager.default.fileExists(atPath: latest.path) else {
-            notifyUser(title: "quill — no transcript yet", body: "Finish a recording first")
+            menuBar.showMessage(
+                title: "Транскриптов пока нет",
+                detail: "Сначала завершите хотя бы одну запись"
+            )
             return
         }
         NSWorkspace.shared.open(latest)
