@@ -62,13 +62,19 @@ struct Run: ParsableCommand {
     private func runMain() throws {
         let root = Config.resolveRoot(cliOverride: out)
 
-        // Non-blocking: permissions prompt on first recording, so warnings at
-        // startup are informational, not fatal.
+        // The tray must stay available even when setup is incomplete. A hard
+        // startup exit is invisible for a background-only app and gives the
+        // user no way to fix permissions from the UI.
         let checks = DoctorReport.run(recordingsRoot: root)
-        if !DoctorReport.allOK(checks) {
+        let startupProblem = DoctorReport.allOK(checks) ? nil : checks.compactMap { check in
+            if case .fail(let message) = check.status {
+                return "\(check.name): \(message)"
+            }
+            return nil
+        }.joined(separator: " · ")
+        if startupProblem != nil {
             FileHandle.standardError.write(Data("startup checks failed:\n".utf8))
             DoctorReport.print(checks)
-            throw ExitCode(1)
         }
 
         let app = NSApplication.shared
@@ -79,6 +85,9 @@ struct Run: ParsableCommand {
         app.finishLaunching()
 
         let controller = AppController(root: root)
+        if let startupProblem {
+            controller.showStartupProblem(startupProblem)
+        }
         if startRecording {
             controller.startRecording()
         }
@@ -101,7 +110,7 @@ struct Run: ParsableCommand {
         // Keep every signal source alive for the full AppKit run loop. This
         // lets launchd logout/update termination finalize AAC packet tables
         // just like the tray's Stop/Quit actions.
-        withExtendedLifetime(signalSources) {
+        withExtendedLifetime((signalSources, controller)) {
             app.run()
         }
     }
@@ -130,6 +139,7 @@ final class AppController {
     private let transcription = TranscriptionCoordinator()
     private var session: RecordingSession?
     private var ticker: Timer?
+    private var transcribingSessionName: String?
 
     init(root: URL) {
         self.root = root
@@ -137,6 +147,7 @@ final class AppController {
         menuBar.onOpenFolder = { [weak self] in self?.openFolder() }
         menuBar.onOpenLatestTranscript = { [weak self] in self?.openLatestTranscript() }
         menuBar.onQuit = { [weak self] in self?.shutdown() }
+        menuBar.onOpenRecording = { [weak self] dir in self?.openRecording(dir) }
         menuBar.update(recording: false, elapsed: nil)
         menuBar.updateSources(recording: false, micActive: false, systemActive: false)
 
@@ -159,6 +170,10 @@ final class AppController {
     func startRecording() {
         guard session == nil else { return }
         startSession()
+    }
+
+    func showStartupProblem(_ problem: String) {
+        menuBar.updateTranscription("setup required · \(problem)")
     }
 
     private func toggle() {
@@ -209,12 +224,20 @@ final class AppController {
         switch status {
         case .idle:
             menuBar.updateTranscription(nil)
+            if let name = transcribingSessionName {
+                transcribingSessionName = nil
+                menuBar.showCompletion(sessionDir: root.appendingPathComponent(name))
+            }
         case .transcribing(let name, let queued):
-            menuBar.updateTranscription(
-                queued > 0 ? "transcribing \(name) · \(queued) queued" : "transcribing \(name)"
-            )
+            transcribingSessionName = name
+            let text = queued > 0
+                ? "transcribing \(name) · \(queued) queued"
+                : "transcribing \(name)"
+            menuBar.updateTranscription(text)
         case .failed(let name):
+            transcribingSessionName = nil
             menuBar.updateTranscription("transcription failed · \(name)")
+            menuBar.showTranscriptionFailure(sessionName: name)
         }
     }
 
@@ -243,6 +266,15 @@ final class AppController {
             return
         }
         NSWorkspace.shared.open(latest)
+    }
+
+    private func openRecording(_ dir: URL) {
+        let transcript = dir.appendingPathComponent("transcript.md")
+        if FileManager.default.fileExists(atPath: transcript.path) {
+            NSWorkspace.shared.activateFileViewerSelecting([transcript])
+        } else {
+            NSWorkspace.shared.open(dir)
+        }
     }
 
     private static func format(_ interval: TimeInterval) -> String {

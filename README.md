@@ -32,9 +32,10 @@ transcription speed.
    feather becomes red, macOS shows the purple recording
    indicator, and the menu shows elapsed time plus live mic/system-audio status.
 3. **Click → Stop recording** when the meeting ends. Transcription starts
-   automatically (the menu shows progress); a notification fires when the
-   transcript is ready. **Open latest transcript** in the menu opens the stable
-   `~/Recordings/latest-transcript.md` file for the most recent completed call.
+   automatically (the menu shows progress). A compact popover attached to the
+   feather offers **Open in Finder** when the transcript is ready, then closes
+   itself after five seconds. **Open latest transcript** in the menu opens the
+   stable `~/Recordings/latest-transcript.md` file for the most recent call.
 
 Each session lands in `~/Recordings/<yyyy.MM.dd-HHmm>/`:
 

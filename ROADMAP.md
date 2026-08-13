@@ -7,6 +7,7 @@ file at `~/Recordings/latest-transcript.md`.
 ## Ready now
 
 - Compact menu-bar control with a red recording state and live source health.
+- Five-second completion popover with a direct Finder action.
 - Separate microphone and system-audio tracks.
 - Local multilingual Parakeet v3 engine plus optional Spokenly batch engine.
 - `me` / `remote` role attribution, timestamp merge, acoustic-echo filtering,
@@ -20,6 +21,8 @@ file at `~/Recordings/latest-transcript.md`.
   solely because a speech detector is uncertain.
 - Add drift correction for long calls, a mic input limiter, and local
   diarization of the system track when several remote people speak.
+- Restart the microphone track after input-device changes and warn when either
+  capture stream stalls instead of silently producing an incomplete recording.
 - Keep a confidence-scored participant timeline. Platform names are hints;
   never assign a human name to a voice merely by roster order.
 
