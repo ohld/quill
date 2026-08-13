@@ -9,7 +9,7 @@ file at `~/Recordings/latest-transcript.md`.
 - Compact menu-bar control with a red recording state and live source health.
 - Five-second completion popover with a direct Finder action.
 - Separate microphone and system-audio tracks.
-- Local multilingual Parakeet v3 engine plus optional Spokenly batch engine.
+- Local multilingual Parakeet v3 transcription with no external service.
 - `me` / `remote` role attribution, timestamp merge, acoustic-echo filtering,
   readable Markdown, canonical timed JSON, retry queue, and stable latest file.
 
@@ -30,8 +30,8 @@ file at `~/Recordings/latest-transcript.md`.
 
 - Add a separate `LiveTranscriptProvider` for provisional captions, with an
   explicit cloud/offline indicator and user consent.
-- A direct Soniox BYOK provider is feasible. Spokenly exposes Soniox for its
-  own dictation UI, but its public CLI only supports batch file transcription.
+- A direct Soniox BYOK provider is feasible if live captions ever justify a
+  clearly opt-in cloud path.
 - Always regenerate the canonical post-call transcript from original tracks
   with the chosen final engine; provisional captions never overwrite it.
 
@@ -46,6 +46,10 @@ file at `~/Recordings/latest-transcript.md`.
 
 ## Public release gate
 
+Current decision: keep this repository private and optimize it for personal
+daily use. The following is deliberately deferred, but becomes mandatory
+before changing repository visibility or distributing binaries.
+
 Before publishing source or binaries:
 
 1. Rename the product, executable, bundle identifiers, config paths, and
@@ -54,6 +58,6 @@ Before publishing source or binaries:
 2. Preserve upstream authorship and ship all files listed in
    `THIRD_PARTY_NOTICES.md` inside the app bundle.
 3. Add recording-consent and sensitive-data guidance.
-4. Verify the archived `.app` contains license resources and that no model or
-   proprietary Spokenly binary is bundled.
+4. Verify the archived `.app` contains license resources and that model-license
+   requirements are met.
 5. Publish from a non-placeholder contributor identity.

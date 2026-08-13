@@ -26,11 +26,7 @@ struct TranscriptNotificationPresentation: Equatable {
         from sessionDir: URL,
         timeZone: TimeZone
     ) -> String {
-        let metaURL = sessionDir.appendingPathComponent("meta.json")
-        if let data = try? Data(contentsOf: metaURL),
-           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let started = json["started"] as? String,
-           let date = ISO8601DateFormatter().date(from: started) {
+        if let date = try? RecordingMetadata.read(from: sessionDir).startedAt {
             let formatter = DateFormatter()
             formatter.locale = Locale(identifier: "ru_RU")
             formatter.timeZone = timeZone
@@ -67,15 +63,6 @@ struct TranscriptNotificationPresentation: Equatable {
         return normalized.count > limit
             ? String(normalized.prefix(limit - 1)) + "…"
             : normalized
-    }
-}
-
-enum TranscriptCompletionRoute: Equatable {
-    case nativeNotification
-    case trayFallback
-
-    static func resolve(nativeNotificationAccepted: Bool) -> Self {
-        nativeNotificationAccepted ? .nativeNotification : .trayFallback
     }
 }
 

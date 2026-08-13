@@ -29,19 +29,25 @@ final class SystemAudioRecorder {
         }
     }
 
+    /// Serializes lifecycle work with the Core Audio IOProc. Lifecycle methods
+    /// hold it throughout; the realtime callback uses `try()` so it never
+    /// blocks. Acquiring it in stop therefore also waits for any active file
+    /// write to finish before the file is released.
+    private let stateLock = NSLock()
     private var tapID = AudioObjectID(kAudioObjectUnknown)
     private var aggregateID = AudioObjectID(kAudioObjectUnknown)
     private var procID: AudioDeviceIOProcID?
     private var file: AVAudioFile?
     private let queue = DispatchQueue(label: "com.digimata.quill.system-tap")
-    private(set) var isRecording = false
-    private let timestampLock = NSLock()
+    private var recording = false
+    private var generation: UInt64 = 0
     private var capturedFirstBufferAt: Date?
+
     /// Wall-clock time of the first captured buffer — the track's true start,
     /// used to offset-align the two tracks' transcript timestamps.
     var firstBufferAt: Date? {
-        timestampLock.lock()
-        defer { timestampLock.unlock() }
+        stateLock.lock()
+        defer { stateLock.unlock() }
         return capturedFirstBufferAt
     }
 
@@ -49,7 +55,12 @@ final class SystemAudioRecorder {
     /// extension). A clean stop is still required to finalize AAC packet
     /// metadata.
     func start(writingTo url: URL) throws {
-        guard !isRecording else { return }
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        guard !recording else { return }
+
+        generation &+= 1
+        capturedFirstBufferAt = nil
 
         let description = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
         description.name = "quill system tap"
@@ -65,19 +76,27 @@ final class SystemAudioRecorder {
             let format = try tapStreamFormat()
             try createAggregateDevice(tapUUID: description.uuid)
             file = try makeFile(url: url, format: format)
-            try installIOProc(format: format)
+            try installIOProc(format: format, generation: generation)
         } catch {
             cleanup()
             throw error
         }
 
-        isRecording = true
+        recording = true
     }
 
     /// Stop capturing and finalize the file. Idempotent.
     func stop() {
-        guard isRecording else { return }
-        isRecording = false
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        guard recording else { return }
+
+        recording = false
+        generation &+= 1
+        // No IOProc can be writing here: an existing writer had to release
+        // this lock first, and new callbacks use try() and are rejected by the
+        // generation check. Releasing now finalizes AAC before stop returns.
+        file = nil
         if let procID, aggregateID != kAudioObjectUnknown {
             AudioDeviceStop(aggregateID, procID)
         }
@@ -140,13 +159,18 @@ final class SystemAudioRecorder {
         }
     }
 
-    private func installIOProc(format: AVAudioFormat) throws {
+    /// `stateLock` must be held by the caller.
+    private func installIOProc(format: AVAudioFormat, generation: UInt64) throws {
         var status = AudioDeviceCreateIOProcIDWithBlock(&procID, aggregateID, queue) {
             [weak self] _, inInputData, _, _, _ in
-            guard let self, let file = self.file else { return }
-            self.timestampLock.lock()
-            if self.capturedFirstBufferAt == nil { self.capturedFirstBufferAt = Date() }
-            self.timestampLock.unlock()
+            guard let self, self.stateLock.try() else { return }
+            defer { self.stateLock.unlock() }
+            guard self.recording,
+                  self.generation == generation,
+                  let file = self.file else { return }
+            if self.capturedFirstBufferAt == nil {
+                self.capturedFirstBufferAt = Date()
+            }
             guard let buffer = AVAudioPCMBuffer(
                 pcmFormat: format,
                 bufferListNoCopy: inInputData,
@@ -164,6 +188,7 @@ final class SystemAudioRecorder {
         guard status == noErr else { throw RecorderError.deviceStartFailed(status) }
     }
 
+    /// `stateLock` must be held by the caller.
     private func cleanup() {
         if let procID, aggregateID != kAudioObjectUnknown {
             AudioDeviceDestroyIOProcID(aggregateID, procID)

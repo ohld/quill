@@ -20,7 +20,7 @@ if launchctl print "${SERVICE}" >/dev/null 2>&1; then
     SERVICE_REGISTERED=true
     ACTIVE_PID="$(pgrep -f "^${BINARY} run$" | head -1 || true)"
     if [ -n "${ACTIVE_PID}" ] && lsof -p "${ACTIVE_PID}" 2>/dev/null \
-        | grep -Eq '/Recordings/.+\.(caf|wav|m4a)$'; then
+        | grep -Eq '\.(caf|wav|m4a)$'; then
         printf 'Refusing to update while Quill is recording. Stop the recording first.\n' >&2
         exit 75
     fi
@@ -89,6 +89,18 @@ codesign --force --deep --sign - --identifier com.ohld.quill \
 
 if [ "${SERVICE_REGISTERED}" = true ]; then
     launchctl kickstart "${SERVICE}"
+    RESTARTED=false
+    for _ in 1 2 3 4 5; do
+        if launchctl print "${SERVICE}" 2>/dev/null | grep -q 'state = running'; then
+            RESTARTED=true
+            break
+        fi
+        sleep 1
+    done
+    if [ "${RESTARTED}" = false ]; then
+        printf 'Quill LaunchAgent did not restart after update.\n' >&2
+        exit 77
+    fi
 else
     "${BINARY}" install --launch-at-login
 fi

@@ -30,7 +30,7 @@ enum EchoFilter {
             .map { Candidate(segment: $0, words: words($0.text)) }
         guard !system.isEmpty else { return segments }
 
-        // Spokenly's local Parakeet response is often word-level. Compare
+        // Parakeet's response is often word-level. Compare
         // sentence-sized track-local context, then remove the original timed
         // word segments belonging to echoed mic utterances. Comparing each
         // one-word fragment independently cannot tolerate acoustic ASR errors.

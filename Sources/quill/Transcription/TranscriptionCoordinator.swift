@@ -8,30 +8,54 @@ import Foundation
 /// just retries on next run. Failures append to the session's transcribe.log
 /// and never block later jobs.
 actor TranscriptionCoordinator {
-    enum Status: Sendable {
+    /// Queue activity is independent from the result of any one session.
+    /// A caller can render this as transient progress without trying to infer
+    /// which session just completed when the queue becomes idle.
+    enum Progress: Sendable, Equatable {
         case idle
-        case transcribing(session: String, queued: Int)
-        case failed(session: String)
+        case transcribing(sessionDir: URL, queued: Int)
+    }
+
+    /// Exactly one outcome is published for every session removed from the
+    /// queue, before the coordinator advances to the next session.
+    enum Outcome: Sendable, Equatable {
+        case succeeded(sessionDir: URL)
+        case failed(sessionDir: URL, reason: String)
     }
 
     private var queue: [URL] = []
+    private var pending: Set<URL> = []
     private var draining = false
-    private var engine: TranscriptionEngine?
-    private var lastFailure: String?
-    private var statusHandler: (@Sendable (Status) -> Void)?
+    private let config: AppConfig
+    private var engine: (any TranscriptionEngine)?
+    private let engineFactory: @Sendable () -> any TranscriptionEngine
+    private var progressHandler: (@Sendable (Progress) -> Void)?
+    private var outcomeHandler: (@Sendable (Outcome) -> Void)?
 
-    func setStatusHandler(_ handler: @escaping @Sendable (Status) -> Void) {
-        statusHandler = handler
+    init(
+        config: AppConfig,
+        engineFactory: @escaping @Sendable () -> any TranscriptionEngine = { ParakeetEngine() }
+    ) {
+        self.config = config
+        self.engineFactory = engineFactory
+    }
+
+    func setProgressHandler(_ handler: @escaping @Sendable (Progress) -> Void) {
+        progressHandler = handler
+    }
+
+    func setOutcomeHandler(_ handler: @escaping @Sendable (Outcome) -> Void) {
+        outcomeHandler = handler
     }
 
     /// Queue a finished session. With transcription disabled in config, the
     /// on_stop hook still fires — it just gets an untranscribed folder.
     func enqueue(_ sessionDir: URL) {
-        guard Config.transcriptionEnabled() else {
+        guard config.transcriptionEnabled else {
             runHook(for: sessionDir)
             return
         }
-        queue.append(sessionDir)
+        appendIfNeeded(sessionDir)
         drainIfIdle()
     }
 
@@ -39,7 +63,7 @@ actor TranscriptionCoordinator {
     /// but were never transcribed. Folder names sort chronologically, so
     /// oldest-first is a name sort.
     func resumePending(root: URL) {
-        guard Config.transcriptionEnabled() else { return }
+        guard config.transcriptionEnabled else { return }
         guard let entries = try? FileManager.default.contentsOfDirectory(
             at: root, includingPropertiesForKeys: nil
         ) else { return }
@@ -51,12 +75,15 @@ actor TranscriptionCoordinator {
                     && !fm.fileExists(atPath: $0.appendingPathComponent("transcript.json").path)
             }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
-        for dir in pending where !queue.contains(dir) {
-            queue.append(dir)
+        var resumed = 0
+        for dir in pending {
+            if appendIfNeeded(dir) {
+                resumed += 1
+            }
         }
-        if !pending.isEmpty {
+        if resumed > 0 {
             FileHandle.standardError.write(Data(
-                "resuming \(pending.count) untranscribed session(s)\n".utf8
+                "resuming \(resumed) untranscribed session(s)\n".utf8
             ))
         }
         drainIfIdle()
@@ -67,38 +94,53 @@ actor TranscriptionCoordinator {
     private func drainIfIdle() {
         guard !draining, !queue.isEmpty else { return }
         draining = true
-        lastFailure = nil
         Task { await drain() }
     }
 
     private func drain() async {
-        while !queue.isEmpty {
-            let dir = queue.removeFirst()
-            publish(.transcribing(session: dir.lastPathComponent, queued: queue.count))
-            do {
-                try await transcribe(dir)
-                runHook(for: dir)
-            } catch {
-                log(dir, "transcription failed: \(error)")
-                lastFailure = dir.lastPathComponent
+        while true {
+            while !queue.isEmpty {
+                let dir = queue.removeFirst()
+                publishProgress(.transcribing(sessionDir: dir, queued: queue.count))
+                do {
+                    try await transcribe(dir)
+                    runHook(for: dir)
+                    publishOutcome(.succeeded(sessionDir: dir))
+                } catch {
+                    let reason = String(describing: error)
+                    log(dir, "transcription failed: \(reason)")
+                    publishOutcome(.failed(sessionDir: dir, reason: reason))
+                }
+                pending.remove(dir)
             }
+
+            await engine?.release()
+            engine = nil
+
+            // The actor is re-entrant while release() awaits. If another
+            // session arrived, keep draining without briefly reporting idle.
+            guard queue.isEmpty else { continue }
+            draining = false
+            publishProgress(.idle)
+            return
         }
-        await engine?.release()
-        engine = nil
-        publish(lastFailure.map { .failed(session: $0) } ?? .idle)
-        draining = false
-        // An enqueue that landed between the loop exiting and the release
-        // finishing would otherwise sit until the next enqueue.
-        drainIfIdle()
+    }
+
+    @discardableResult
+    private func appendIfNeeded(_ sessionDir: URL) -> Bool {
+        let dir = sessionDir.standardizedFileURL
+        guard pending.insert(dir).inserted else { return false }
+        queue.append(dir)
+        return true
     }
 
     private func transcribe(_ dir: URL) async throws {
-        let meta = try SessionMeta.read(from: dir)
+        let metadata = try RecordingMetadata.read(from: dir)
         let engine = try await preparedEngine()
 
         var merged: [Transcript.Segment] = []
         var successfulTracks = 0
-        for track in meta.tracks {
+        for track in metadata.tracks {
             let audio = dir.appendingPathComponent(track.file)
             guard FileManager.default.fileExists(atPath: audio.path) else {
                 log(dir, "skipping missing track \(track.file)")
@@ -115,10 +157,11 @@ actor TranscriptionCoordinator {
                 log(dir, "skipping \(track.file): \(error)")
                 continue
             }
-            let offset = TimeInterval(track.offsetMs) / 1000
+            let speaker = config.speakerName(for: track.kind)
+            let offset = TimeInterval(track.offsetMilliseconds) / 1000
             merged += segments.map {
                 Transcript.Segment(
-                    speaker: $0.speaker.map { "\(track.speaker) · \($0)" } ?? track.speaker,
+                    speaker: $0.speaker.map { "\(speaker) · \($0)" } ?? speaker,
                     start_ms: Int(($0.start + offset) * 1000),
                     end_ms: Int(($0.end + offset) * 1000),
                     text: $0.text
@@ -130,12 +173,12 @@ actor TranscriptionCoordinator {
         }
         merged.sort { $0.start_ms < $1.start_ms }
 
-        if Config.transcriptEchoFilter() {
+        if config.transcriptEchoFilter {
             let before = merged.count
             merged = EchoFilter.dropEchoes(
                 merged,
-                micSpeaker: Config.speakerName(for: "mic"),
-                systemSpeaker: Config.speakerName(for: "system")
+                micSpeaker: config.speakerNames.mic,
+                systemSpeaker: config.speakerNames.system
             )
             if merged.count != before {
                 log(
@@ -156,21 +199,9 @@ actor TranscriptionCoordinator {
         log(dir, "done — \(merged.count) segments, \(utterances) readable utterances")
     }
 
-    private func preparedEngine() async throws -> TranscriptionEngine {
+    private func preparedEngine() async throws -> any TranscriptionEngine {
         if let engine { return engine }
-        let configured = Config.transcriptionEngine()
-        let engine: TranscriptionEngine
-        switch configured {
-        case "spokenly":
-            engine = SpokenlyEngine()
-        case "parakeet":
-            engine = ParakeetEngine()
-        default:
-            FileHandle.standardError.write(Data(
-                "warning: unknown transcription engine \"\(configured)\" — using parakeet\n".utf8
-            ))
-            engine = ParakeetEngine()
-        }
+        let engine = engineFactory()
         try await engine.prepare()
         self.engine = engine
         return engine
@@ -188,7 +219,7 @@ actor TranscriptionCoordinator {
     /// as its sole argument, after the transcript exists (or immediately after
     /// recording when transcription is disabled).
     private func runHook(for dir: URL) {
-        guard let cmd = Config.onStop() else { return }
+        guard let cmd = config.onStop else { return }
         let task = Process()
         task.launchPath = "/bin/sh"
         task.arguments = ["-c", "\(cmd) \"$0\"", dir.path]
@@ -211,59 +242,12 @@ actor TranscriptionCoordinator {
         }
     }
 
-    private func publish(_ status: Status) {
-        statusHandler?(status)
-    }
-}
-
-/// The slice of meta.json the coordinator needs: which files exist, who they
-/// represent, and how far each track started after the earliest one.
-private struct SessionMeta {
-    struct Track {
-        let file: String
-        let speaker: String
-        let offsetMs: Int
+    private func publishProgress(_ progress: Progress) {
+        progressHandler?(progress)
     }
 
-    let tracks: [Track]
-
-    enum MetaError: Error, CustomStringConvertible {
-        case unreadable(URL)
-
-        var description: String {
-            switch self {
-            case .unreadable(let url): return "can't parse \(url.path)"
-            }
-        }
-    }
-
-    static func read(from dir: URL) throws -> SessionMeta {
-        let url = dir.appendingPathComponent("meta.json")
-        guard
-            let data = try? Data(contentsOf: url),
-            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let files = json["files"] as? [String: String]
-        else { throw MetaError.unreadable(url) }
-
-        // Sessions recorded before offsets were captured default to 0 —
-        // tracks start within tens of milliseconds of each other anyway.
-        let offsets = json["start_offset_ms"] as? [String: Int] ?? [:]
-        var tracks: [Track] = []
-        if let mic = files["mic"] {
-            tracks.append(Track(
-                file: mic,
-                speaker: Config.speakerName(for: "mic"),
-                offsetMs: offsets["mic"] ?? 0
-            ))
-        }
-        if let system = files["system"] {
-            tracks.append(Track(
-                file: system,
-                speaker: Config.speakerName(for: "system"),
-                offsetMs: offsets["system"] ?? 0
-            ))
-        }
-        return SessionMeta(tracks: tracks)
+    private func publishOutcome(_ outcome: Outcome) {
+        outcomeHandler?(outcome)
     }
 }
 

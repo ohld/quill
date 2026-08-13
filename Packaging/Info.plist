@@ -18,10 +18,10 @@
     <string>Quill</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>0.1.1-ohld.2</string>
-    <key>CFBundleVersion</key>
-    <string>2</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.1-ohld.3</string>
+	<key>CFBundleVersion</key>
+	<string>3</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.2</string>
     <key>LSUIElement</key>

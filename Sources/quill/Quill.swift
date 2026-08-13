@@ -29,13 +29,13 @@ struct RecordOnce: ParsableCommand {
 
     func run() throws {
         guard seconds >= 1 else { throw ValidationError("--seconds must be at least 1") }
-        let session = try RecordingSession(root: Config.resolveRoot(cliOverride: out))
+        let session = try RecordingSession(config: Config.load(cliOverride: out))
         try session.start()
         FileHandle.standardError.write(Data(
             "● recording \(seconds)s → \(session.dir.path)\n".utf8
         ))
         Thread.sleep(forTimeInterval: seconds)
-        session.stop()
+        try session.stop()
         print(session.dir.path)
     }
 }
@@ -60,12 +60,12 @@ struct Run: ParsableCommand {
 
     @MainActor
     private func runMain() throws {
-        let root = Config.resolveRoot(cliOverride: out)
+        let config = Config.load(cliOverride: out)
 
         // The tray must stay available even when setup is incomplete. A hard
         // startup exit is invisible for a background-only app and gives the
         // user no way to fix permissions from the UI.
-        let checks = DoctorReport.run(recordingsRoot: root)
+        let checks = DoctorReport.run(config: config)
         let startupProblem = DoctorReport.allOK(checks) ? nil : checks.compactMap { check in
             if case .fail(let message) = check.status {
                 return "\(check.name): \(message)"
@@ -84,7 +84,7 @@ struct Run: ParsableCommand {
         // creating the NSStatusItem so macOS reliably publishes it.
         app.finishLaunching()
 
-        let controller = AppController(root: root)
+        let controller = AppController(config: config)
         if let startupProblem {
             controller.showStartupProblem(startupProblem)
         }
@@ -105,7 +105,7 @@ struct Run: ParsableCommand {
         }
 
         FileHandle.standardError.write(Data(
-            "quill up · recordings → \(root.path) · ^C to quit\n".utf8
+            "quill up · recordings → \(config.recordingsRoot.path) · ^C to quit\n".utf8
         ))
         // Keep every signal source alive for the full AppKit run loop. This
         // lets launchd logout/update termination finalize AAC packet tables
@@ -122,7 +122,7 @@ struct Doctor: ParsableCommand {
     )
 
     func run() throws {
-        let checks = DoctorReport.run(recordingsRoot: Config.resolveRoot(cliOverride: nil))
+        let checks = DoctorReport.run(config: Config.load())
         DoctorReport.print(checks)
         if !DoctorReport.allOK(checks) {
             throw ExitCode(1)
@@ -134,16 +134,16 @@ struct Doctor: ParsableCommand {
 /// ticker. All state transitions happen on the main actor.
 @MainActor
 final class AppController {
-    private let root: URL
+    private let config: AppConfig
     private let menuBar = MenuBarController()
     private let notifications = TranscriptNotificationController()
-    private let transcription = TranscriptionCoordinator()
+    private let transcription: TranscriptionCoordinator
     private var session: RecordingSession?
     private var ticker: Timer?
-    private var transcribingSessionName: String?
 
-    init(root: URL) {
-        self.root = root
+    init(config: AppConfig) {
+        self.config = config
+        transcription = TranscriptionCoordinator(config: config)
         menuBar.onToggle = { [weak self] in self?.toggle() }
         menuBar.onOpenFolder = { [weak self] in self?.openFolder() }
         menuBar.onOpenLatestTranscript = { [weak self] in self?.openLatestTranscript() }
@@ -155,10 +155,15 @@ final class AppController {
         menuBar.update(recording: false, elapsed: nil)
         menuBar.updateSources(recording: false, micActive: false, systemActive: false)
 
-        Task { [transcription, root] in
-            await transcription.setStatusHandler { status in
+        Task { [transcription, root = config.recordingsRoot] in
+            await transcription.setProgressHandler { progress in
                 Task { @MainActor [weak self] in
-                    self?.showTranscription(status)
+                    self?.showTranscription(progress)
+                }
+            }
+            await transcription.setOutcomeHandler { outcome in
+                Task { @MainActor [weak self] in
+                    self?.showTranscription(outcome)
                 }
             }
             await transcription.resumePending(root: root)
@@ -190,7 +195,7 @@ final class AppController {
 
     private func startSession() {
         do {
-            let newSession = try RecordingSession(root: root)
+            let newSession = try RecordingSession(config: config)
             try newSession.start()
             session = newSession
             FileHandle.standardError.write(Data("● recording → \(newSession.dir.path)\n".utf8))
@@ -212,49 +217,59 @@ final class AppController {
 
     private func stopSession() {
         guard let session else { return }
-        session.stop()
+        do {
+            try session.stop()
+        } catch {
+            FileHandle.standardError.write(Data("recording finalization failed: \(error)\n".utf8))
+            menuBar.showMessage(
+                title: "Запись сохранена не полностью",
+                detail: "Аудио остановлено, но не удалось подготовить транскрипцию: \(error)"
+            )
+            finishStoppedSession()
+            return
+        }
         let elapsed = Self.format(Date().timeIntervalSince(session.startedAt))
         FileHandle.standardError.write(Data(
             "○ stopped · \(elapsed) · \(session.dir.path)\n".utf8
         ))
-        self.session = nil
-        ticker?.invalidate()
-        ticker = nil
-        menuBar.update(recording: false, elapsed: nil)
-        menuBar.updateSources(recording: false, micActive: false, systemActive: false)
+        finishStoppedSession()
 
         let dir = session.dir
         Task { [transcription] in await transcription.enqueue(dir) }
     }
 
-    private func showTranscription(_ status: TranscriptionCoordinator.Status) {
-        switch status {
+    private func finishStoppedSession() {
+        self.session = nil
+        ticker?.invalidate()
+        ticker = nil
+        menuBar.update(recording: false, elapsed: nil)
+        menuBar.updateSources(recording: false, micActive: false, systemActive: false)
+    }
+
+    private func showTranscription(_ progress: TranscriptionCoordinator.Progress) {
+        switch progress {
         case .idle:
             menuBar.updateTranscription(nil)
-            if let name = transcribingSessionName {
-                transcribingSessionName = nil
-                let dir = root.appendingPathComponent(name)
-                Task { @MainActor [weak self, dir] in
-                    guard let self else { return }
-                    let nativeAccepted = await self.notifications.notifyTranscriptReady(
-                        sessionDir: dir
-                    )
-                    if TranscriptCompletionRoute.resolve(
-                        nativeNotificationAccepted: nativeAccepted
-                    ) == .trayFallback {
-                        self.menuBar.showCompletion(sessionDir: dir)
-                    }
-                }
-            }
-        case .transcribing(let name, let queued):
-            transcribingSessionName = name
+        case .transcribing(let dir, let queued):
+            let name = dir.lastPathComponent
             let text = queued > 0
                 ? "transcribing \(name) · \(queued) queued"
                 : "transcribing \(name)"
             menuBar.updateTranscription(text)
-        case .failed(let name):
-            transcribingSessionName = nil
-            menuBar.updateTranscription("transcription failed · \(name)")
+        }
+    }
+
+    private func showTranscription(_ outcome: TranscriptionCoordinator.Outcome) {
+        switch outcome {
+        case .succeeded(let dir):
+            Task { @MainActor [weak self, dir] in
+                guard let self else { return }
+                if !(await self.notifications.notifyTranscriptReady(sessionDir: dir)) {
+                    self.menuBar.showCompletion(sessionDir: dir)
+                }
+            }
+        case .failed(let dir, _):
+            let name = dir.lastPathComponent
             menuBar.showTranscriptionFailure(sessionName: name)
         }
     }
@@ -273,12 +288,15 @@ final class AppController {
     }
 
     private func openFolder() {
-        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        NSWorkspace.shared.open(root)
+        try? FileManager.default.createDirectory(
+            at: config.recordingsRoot,
+            withIntermediateDirectories: true
+        )
+        NSWorkspace.shared.open(config.recordingsRoot)
     }
 
     private func openLatestTranscript() {
-        let latest = root.appendingPathComponent("latest-transcript.md")
+        let latest = config.recordingsRoot.appendingPathComponent("latest-transcript.md")
         guard FileManager.default.fileExists(atPath: latest.path) else {
             menuBar.showMessage(
                 title: "Транскриптов пока нет",

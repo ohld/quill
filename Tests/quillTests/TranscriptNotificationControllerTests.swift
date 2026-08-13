@@ -3,26 +3,19 @@ import XCTest
 @testable import quill
 
 final class TranscriptNotificationControllerTests: XCTestCase {
-    func testNativeNotificationSuppressesTrayFallback() {
-        XCTAssertEqual(
-            TranscriptCompletionRoute.resolve(nativeNotificationAccepted: true),
-            .nativeNotification
-        )
-        XCTAssertEqual(
-            TranscriptCompletionRoute.resolve(nativeNotificationAccepted: false),
-            .trayFallback
-        )
-    }
-
     func testPresentationUsesReadableStartTimeAndTranscriptPreview() throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("2026.08.13-1345-2-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        let meta: [String: Any] = ["started": "2026-08-13T10:45:00Z"]
-        try JSONSerialization.data(withJSONObject: meta).write(
-            to: dir.appendingPathComponent("meta.json")
+        try RecordingMetadata(
+            startedAt: try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-08-13T10:45:00Z")),
+            endedAt: nil,
+            durationSeconds: nil,
+            tracks: []
+        ).write(
+            to: dir
         )
         let transcript = Transcript(
             engine: "parakeet",
