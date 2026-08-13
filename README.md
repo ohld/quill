@@ -35,9 +35,9 @@ transcription speed.
    the recording start time, a transcript preview, and **Open in Finder** when
    the transcript is ready. If macOS notifications are unavailable, a compact
    popover attached to the feather provides the same Finder action instead;
-   the two are never shown together. **Open latest transcript** in the menu
-   opens the stable `~/Recordings/latest-transcript.md` file for the most
-   recent call.
+   the two are never shown together. **Copy Last Transcript Path** in the menu
+   copies the absolute path to stable `~/Recordings/latest-transcript.md`, ready
+   to paste into an agent or another app.
 
 Each session lands in `~/Recordings/<yyyy.MM.dd-HHmm>/`:
 

@@ -20,7 +20,7 @@ final class MenuBarController {
 
     var onToggle: (() -> Void)?
     var onOpenFolder: (() -> Void)?
-    var onOpenLatestTranscript: (() -> Void)?
+    var onCopyLatestTranscriptPath: (() -> Void)?
     var onOpenRecording: ((URL) -> Void)?
     var onQuit: (() -> Void)?
 
@@ -67,12 +67,12 @@ final class MenuBarController {
         )
         menu.addItem(openFolder)
 
-        let openLatestTranscript = NSMenuItem(
-            title: "Open latest transcript",
-            action: #selector(openLatestTranscriptClicked),
+        let copyLatestTranscriptPath = NSMenuItem(
+            title: "Copy Last Transcript Path",
+            action: #selector(copyLatestTranscriptPathClicked),
             keyEquivalent: "t"
         )
-        menu.addItem(openLatestTranscript)
+        menu.addItem(copyLatestTranscriptPath)
 
         menu.addItem(.separator())
 
@@ -83,7 +83,7 @@ final class MenuBarController {
         )
         menu.addItem(quit)
 
-        for item in [toggleItem, openFolder, openLatestTranscript, quit] {
+        for item in [toggleItem, openFolder, copyLatestTranscriptPath, quit] {
             item.target = self
         }
 
@@ -259,7 +259,7 @@ final class MenuBarController {
 
     @objc private func toggleClicked() { onToggle?() }
     @objc private func openFolderClicked() { onOpenFolder?() }
-    @objc private func openLatestTranscriptClicked() { onOpenLatestTranscript?() }
+    @objc private func copyLatestTranscriptPathClicked() { onCopyLatestTranscriptPath?() }
     @objc private func quitClicked() { onQuit?() }
 }
 

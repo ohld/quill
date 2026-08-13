@@ -146,7 +146,7 @@ final class AppController {
         transcription = TranscriptionCoordinator(config: config)
         menuBar.onToggle = { [weak self] in self?.toggle() }
         menuBar.onOpenFolder = { [weak self] in self?.openFolder() }
-        menuBar.onOpenLatestTranscript = { [weak self] in self?.openLatestTranscript() }
+        menuBar.onCopyLatestTranscriptPath = { [weak self] in self?.copyLatestTranscriptPath() }
         menuBar.onQuit = { [weak self] in self?.shutdown() }
         menuBar.onOpenRecording = { [weak self] dir in self?.openRecording(dir) }
         Task { [notifications] in
@@ -295,7 +295,7 @@ final class AppController {
         NSWorkspace.shared.open(config.recordingsRoot)
     }
 
-    private func openLatestTranscript() {
+    private func copyLatestTranscriptPath() {
         let latest = config.recordingsRoot.appendingPathComponent("latest-transcript.md")
         guard FileManager.default.fileExists(atPath: latest.path) else {
             menuBar.showMessage(
@@ -304,7 +304,8 @@ final class AppController {
             )
             return
         }
-        NSWorkspace.shared.open(latest)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(latest.path, forType: .string)
     }
 
     private func openRecording(_ dir: URL) {
