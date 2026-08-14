@@ -35,10 +35,12 @@ transcript with no file shuffling or cloud transcription dependency.
 
 ## Product boundaries
 
-- Manual tray start/stop is the primary control path.
-- Silence detection may suggest stopping, but must never stop automatically.
-- Live captions and meeting-platform integrations are future opt-in features;
-  they cannot replace the canonical local post-call transcript.
+- Manual tray start/stop is the primary control path. Native Meet/Zoom presence
+  detection may offer those same actions, but never invokes them automatically.
+- Silence detection may suggest stopping only as a fallback, and must never
+  stop automatically.
+- Live captions and participant-aware platform integrations are future opt-in
+  features; they cannot replace the canonical local post-call transcript.
 - The current name and feather branding are acceptable only for private use.
   Rebranding all product namespaces is a release gate before public source or
   binary distribution; see `ROADMAP.md`.

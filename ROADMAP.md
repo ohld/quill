@@ -7,6 +7,9 @@ file at `~/Recordings/latest-transcript.md`.
 ## Ready now
 
 - Compact menu-bar control with a red recording state and live source health.
+- Native browser-based Meet and Zoom call-presence suggestions from application
+  windows plus per-process input/output stream state. Suggestions never start
+  or stop recording automatically.
 - Five-second completion popover with a direct Finder action.
 - Separate microphone and system-audio tracks.
 - Local multilingual Parakeet v3 transcription with no external service.
@@ -15,9 +18,10 @@ file at `~/Recordings/latest-transcript.md`.
 
 ## Next: trustworthy call assistance
 
-- Detect likely Meet, Zoom, and Telegram calls from app/window state plus audio
-  activity; suggest starting rather than silently recording.
-- After 60–90 seconds of silence on both tracks, suggest stopping. Never stop
+- Extend call detection to Telegram and additional browsers after real-call
+  traces establish trustworthy platform-specific signals.
+- Use 60–90 seconds of silence on both tracks only as a fallback stop
+  suggestion when native call lifecycle detection is unavailable. Never stop
   solely because a speech detector is uncertain.
 - Add drift correction for long calls, a mic input limiter, and local
   diarization of the system track when several remote people speak.

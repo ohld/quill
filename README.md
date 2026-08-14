@@ -30,6 +30,9 @@ transcription speed.
    for microphone and System Audio Recording permissions. While recording, the
    feather becomes red, macOS shows the purple recording
    indicator, and the menu shows elapsed time plus live mic/system-audio status.
+   Quill can also recognize a likely Google Meet in a browser or a Zoom call from
+   native macOS window and per-process audio-stream state, then offer this same
+   manual Start action in a tray popup. It never starts recording by itself.
 3. **Click → Stop recording** when the meeting ends. Transcription starts
    automatically (the menu shows progress). A native Quill notification shows
    the recording start time, a transcript preview, and **Open in Finder** when
@@ -38,6 +41,13 @@ transcription speed.
    the two are never shown together. **Copy Last Transcript Path** in the menu
    copies the absolute path to stable `~/Recordings/latest-transcript.md`, ready
    to paste into an agent or another app.
+
+When a detected call's application audio streams close, Quill offers **Stop
+and transcribe** after a short debounce. This observes stream lifecycle rather
+than speech or silence, never stops automatically, and needs no browser
+extension or network service. Browser audio belongs to the whole browser, not
+an individual tab, so Meet suggestions intentionally require both a Meet-titled
+window and active Zen input/output streams.
 
 Each session lands in `~/Recordings/<yyyy.MM.dd-HHmm>/`:
 

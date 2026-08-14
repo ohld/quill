@@ -174,6 +174,32 @@ final class MenuBarController {
         )
     }
 
+    func showCallStartSuggestion(
+        platform: CallPlatform,
+        onStart: @escaping () -> Void
+    ) {
+        showPopover(
+            title: "Обнаружен \(platform.displayName)",
+            detail: "Начать локальную запись звонка?",
+            buttonTitle: "Начать запись",
+            dismissAfter: 15,
+            onAction: onStart
+        )
+    }
+
+    func showCallStopSuggestion(
+        platform: CallPlatform,
+        onStop: @escaping () -> Void
+    ) {
+        showPopover(
+            title: "\(platform.displayName), похоже, завершён",
+            detail: "Остановить запись и создать транскрипт?",
+            buttonTitle: "Остановить и расшифровать",
+            dismissAfter: 20,
+            onAction: onStop
+        )
+    }
+
     private func showPopover(
         title: String,
         detail: String,

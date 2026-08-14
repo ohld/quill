@@ -138,7 +138,9 @@ final class AppController {
     private let menuBar = MenuBarController()
     private let notifications = TranscriptNotificationController()
     private let transcription: TranscriptionCoordinator
+    private let callPresence = CallPresenceDetector()
     private var session: RecordingSession?
+    private var sessionCallPlatform: CallPlatform?
     private var ticker: Timer?
 
     init(config: AppConfig) {
@@ -149,6 +151,9 @@ final class AppController {
         menuBar.onCopyLatestTranscriptPath = { [weak self] in self?.copyLatestTranscriptPath() }
         menuBar.onQuit = { [weak self] in self?.shutdown() }
         menuBar.onOpenRecording = { [weak self] dir in self?.openRecording(dir) }
+        callPresence.onEvent = { [weak self] event in
+            self?.handleCallPresence(event)
+        }
         Task { [notifications] in
             await notifications.requestAuthorizationIfNeeded()
         }
@@ -168,17 +173,19 @@ final class AppController {
             }
             await transcription.resumePending(root: root)
         }
+        callPresence.start()
     }
 
     /// Stop any live session cleanly (finalizing files) and exit.
     func shutdown() {
+        callPresence.stop()
         stopSession()
         NSApp.terminate(nil)
     }
 
     func startRecording() {
         guard session == nil else { return }
-        startSession()
+        startSession(boundTo: callPresence.activePlatform)
     }
 
     func showStartupProblem(_ problem: String) {
@@ -187,17 +194,18 @@ final class AppController {
 
     private func toggle() {
         if session == nil {
-            startSession()
+            startSession(boundTo: callPresence.activePlatform)
         } else {
             stopSession()
         }
     }
 
-    private func startSession() {
+    private func startSession(boundTo platform: CallPlatform?) {
         do {
             let newSession = try RecordingSession(config: config)
             try newSession.start()
             session = newSession
+            sessionCallPlatform = platform
             FileHandle.standardError.write(Data("● recording → \(newSession.dir.path)\n".utf8))
         } catch {
             FileHandle.standardError.write(Data("recording start failed: \(error)\n".utf8))
@@ -240,6 +248,7 @@ final class AppController {
 
     private func finishStoppedSession() {
         self.session = nil
+        sessionCallPlatform = nil
         ticker?.invalidate()
         ticker = nil
         menuBar.update(recording: false, elapsed: nil)
@@ -285,6 +294,36 @@ final class AppController {
             micActive: session.micHasAudio,
             systemActive: session.systemHasAudio
         )
+    }
+
+    private func handleCallPresence(_ event: CallPresenceEvent) {
+        FileHandle.standardError.write(Data("call presence: \(event)\n".utf8))
+        switch event {
+        case .started(let platform):
+            if session != nil {
+                // A manually started recording is very likely intended for the
+                // call that just became active, so bind it for the end prompt.
+                sessionCallPlatform = sessionCallPlatform ?? platform
+                return
+            }
+            menuBar.showCallStartSuggestion(platform: platform) { [weak self] in
+                guard let self,
+                      self.session == nil,
+                      self.callPresence.activePlatform == platform
+                else { return }
+                self.startSession(boundTo: platform)
+            }
+
+        case .ended(let platform):
+            guard session != nil, sessionCallPlatform == platform else { return }
+            // If the user keeps recording, a later detected call can bind to
+            // the same long-running recording independently.
+            sessionCallPlatform = nil
+            menuBar.showCallStopSuggestion(platform: platform) { [weak self] in
+                guard self?.session != nil else { return }
+                self?.stopSession()
+            }
+        }
     }
 
     private func openFolder() {
