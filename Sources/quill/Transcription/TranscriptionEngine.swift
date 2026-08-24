@@ -6,6 +6,16 @@ struct TranscriptSegment: Sendable {
     let start: TimeInterval
     let end: TimeInterval
     let text: String
+    /// Optional engine-provided diarization label. Track identity remains the
+    /// fallback, so mic/system still gives free me-vs-them separation.
+    let speaker: String?
+
+    init(start: TimeInterval, end: TimeInterval, text: String, speaker: String? = nil) {
+        self.start = start
+        self.end = end
+        self.text = text
+        self.speaker = speaker
+    }
 }
 
 /// A speech-to-text engine quill can run locally. Engines are prepared lazily

@@ -1,8 +1,10 @@
 import AVFoundation
+import CoreML
 import FluidAudio
 import Foundation
 
-/// Parakeet TDT 0.6B v2 (English) via FluidAudio's Core ML port. Models
+/// Parakeet TDT 0.6B v3 (25 European languages, including Russian) via
+/// FluidAudio's Core ML port. Models
 /// download once into FluidAudio's managed cache (~600 MB); after that,
 /// transcription runs entirely on-device at roughly 20 seconds per hour of
 /// audio on Apple Silicon.
@@ -22,13 +24,22 @@ actor ParakeetEngine: TranscriptionEngine {
     }
 
     nonisolated let name = "parakeet"
-    nonisolated let model = "parakeet-tdt-0.6b-v2-coreml"
+    nonisolated let model = "parakeet-tdt-0.6b-v3-coreml"
 
     private var manager: AsrManager?
 
     func prepare() async throws {
         guard manager == nil else { return }
-        let models = try await AsrModels.downloadAndLoad(version: .v2)
+        // The default FluidAudio route runs the large conformer encoder on
+        // Apple's Neural Engine. On this Mac, ANE's asynchronous runtime can
+        // time out (`Encoder_main...CancelTimedOutAsyncTask`) on long meeting
+        // tracks. FluidAudio explicitly supports the GPU encoder path; it is
+        // WER-neutral, faster on Apple Silicon, and avoids that E5RT failure.
+        // The small decoder/joint models keep FluidAudio's normal settings.
+        let models = try await AsrModels.downloadAndLoad(
+            version: .v3,
+            encoderComputeUnits: .cpuAndGPU
+        )
         let manager = AsrManager()
         try await manager.loadModels(models)
         self.manager = manager

@@ -1,0 +1,35 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  swift:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run tests
+        run: |
+          set +e
+          swift test 2>&1 | tee swift-test.log
+          STATUS="${PIPESTATUS[0]}"
+          if [ "${STATUS}" -ne 0 ]; then
+            {
+              echo '### Swift test failure'
+              echo '```text'
+              tail -80 swift-test.log
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY}"
+            MESSAGE="$(tail -40 swift-test.log | tr '\n' ' ')"
+            echo "::error title=Swift test failure::${MESSAGE}"
+          fi
+          exit "${STATUS}"
+      - name: Upload failed test log
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: swift-test-log
+          path: swift-test.log
+      - name: Build release app
+        run: Scripts/package-release.sh

@@ -15,12 +15,12 @@ struct Check {
 }
 
 enum DoctorReport {
-    static func run(recordingsRoot: URL) -> [Check] {
+    static func run(config: AppConfig) -> [Check] {
         [
             checkMicrophone(),
             checkSystemAudio(),
-            checkRecordingsRoot(recordingsRoot),
-            checkTranscription(),
+            checkRecordingsRoot(config.recordingsRoot),
+            checkTranscription(config: config),
         ]
     }
 
@@ -78,21 +78,21 @@ enum DoctorReport {
 
     /// Never discover a missing model after an important meeting: report
     /// whether the parakeet models are already in FluidAudio's cache.
-    static func checkTranscription() -> Check {
-        guard Config.transcriptionEnabled() else {
+    static func checkTranscription(config: AppConfig) -> Check {
+        guard config.transcriptionEnabled else {
             return Check(
                 name: "transcription",
                 status: .warn("disabled in config"),
                 remediation: nil
             )
         }
-        let cache = AsrModels.defaultCacheDirectory(for: .v2)
-        if AsrModels.modelsExist(at: cache, version: .v2) {
+        let cache = AsrModels.defaultCacheDirectory(for: .v3)
+        if AsrModels.modelsExist(at: cache, version: .v3) {
             return Check(name: "transcription", status: .ok, remediation: nil)
         }
         return Check(
             name: "transcription",
-            status: .warn("parakeet models not downloaded (~600 MB)"),
+            status: .warn("multilingual parakeet v3 models not downloaded (~500 MB)"),
             remediation: "downloads automatically on first transcription — record a short test session while online"
         )
     }
