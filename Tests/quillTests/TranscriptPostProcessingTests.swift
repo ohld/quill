@@ -118,6 +118,36 @@ final class TranscriptPostProcessingTests: XCTestCase {
         ))
     }
 
+    func testMostRecentCompletedTranscriptReturnsSessionFileNotStableAlias() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("quill-test-\(UUID().uuidString)", isDirectory: true)
+        let older = root.appendingPathComponent("2026.08.12-1535", isDirectory: true)
+        let newest = root.appendingPathComponent("2026.08.12-1600", isDirectory: true)
+        let incomplete = root.appendingPathComponent("2026.08.12-1700", isDirectory: true)
+        try FileManager.default.createDirectory(at: older, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: newest, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: incomplete, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let transcript = Transcript(
+            engine: "test",
+            model: "multilingual",
+            created_at: "2026-08-12T00:00:00Z",
+            segments: [segment("Dan", 0, 1_000, "Готово.")]
+        )
+        try transcript.write(to: older)
+        try transcript.write(to: newest)
+        try Data("not complete".utf8).write(to: TranscriptFiles.markdown(in: incomplete))
+
+        let target = TranscriptFiles.mostRecentCompletedTranscript(in: root)
+
+        XCTAssertEqual(
+            target?.resolvingSymlinksInPath(),
+            TranscriptFiles.markdown(in: newest).resolvingSymlinksInPath()
+        )
+        XCTAssertNotEqual(target, TranscriptFiles.stableLatest(in: root))
+    }
+
     private func segment(
         _ speaker: String,
         _ start: Int,

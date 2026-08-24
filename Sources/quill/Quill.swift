@@ -148,7 +148,7 @@ final class AppController {
         transcription = TranscriptionCoordinator(config: config)
         menuBar.onToggle = { [weak self] in self?.toggle() }
         menuBar.onOpenFolder = { [weak self] in self?.openFolder() }
-        menuBar.onCopyLatestTranscriptPath = { [weak self] in self?.copyLatestTranscriptPath() }
+        menuBar.onCopyLastTranscriptPath = { [weak self] in self?.copyLastTranscriptPath() }
         menuBar.onQuit = { [weak self] in self?.shutdown() }
         menuBar.onOpenRecording = { [weak self] dir in self?.openRecording(dir) }
         callPresence.onEvent = { [weak self] event in
@@ -334,9 +334,10 @@ final class AppController {
         NSWorkspace.shared.open(config.recordingsRoot)
     }
 
-    private func copyLatestTranscriptPath() {
-        let latest = config.recordingsRoot.appendingPathComponent("latest-transcript.md")
-        guard FileManager.default.fileExists(atPath: latest.path) else {
+    private func copyLastTranscriptPath() {
+        guard let transcript = TranscriptFiles.mostRecentCompletedTranscript(
+            in: config.recordingsRoot
+        ) else {
             menuBar.showMessage(
                 title: "Транскриптов пока нет",
                 detail: "Сначала завершите хотя бы одну запись"
@@ -344,11 +345,11 @@ final class AppController {
             return
         }
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(latest.path, forType: .string)
+        NSPasteboard.general.setString(transcript.path, forType: .string)
     }
 
     private func openRecording(_ dir: URL) {
-        let transcript = dir.appendingPathComponent("transcript.md")
+        let transcript = TranscriptFiles.markdown(in: dir)
         if FileManager.default.fileExists(atPath: transcript.path) {
             NSWorkspace.shared.activateFileViewerSelecting([transcript])
         } else {

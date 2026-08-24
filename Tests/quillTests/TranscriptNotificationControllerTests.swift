@@ -53,14 +53,33 @@ final class TranscriptNotificationControllerTests: XCTestCase {
         XCTAssertEqual(presentation.preview, "Транскрипт сохранён локально")
     }
 
-    func testNotificationActionTargetsExactSessionDirectory() {
-        let path = "/Users/test/Recordings/2026.08.13-1345"
+    func testNotificationActionsTargetExactCompletedSession() {
+        let session = "/Users/test/Recordings/2026.08.13-1345"
 
-        let target = TranscriptNotificationController.actionTarget(
-            userInfo: ["sessionPath": path]
+        let open = TranscriptNotificationController.responseAction(
+            identifier: "OPEN_TRANSCRIPT_IN_FINDER",
+            userInfo: ["sessionPath": session]
+        )
+        let copy = TranscriptNotificationController.responseAction(
+            identifier: "COPY_TRANSCRIPT_PATH",
+            userInfo: ["sessionPath": session]
         )
 
-        XCTAssertEqual(target?.path, path)
-        XCTAssertNil(TranscriptNotificationController.actionTarget(userInfo: [:]))
+        XCTAssertEqual(
+            open,
+            .open(sessionDir: URL(fileURLWithPath: session, isDirectory: true))
+        )
+        XCTAssertEqual(
+            copy,
+            .copyPath(transcript: URL(fileURLWithPath: "\(session)/transcript.md"))
+        )
+        XCTAssertNil(TranscriptNotificationController.responseAction(
+            identifier: "UNKNOWN",
+            userInfo: ["sessionPath": session]
+        ))
+        XCTAssertNil(TranscriptNotificationController.responseAction(
+            identifier: "COPY_TRANSCRIPT_PATH",
+            userInfo: [:]
+        ))
     }
 }

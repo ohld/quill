@@ -20,7 +20,7 @@ final class MenuBarController {
 
     var onToggle: (() -> Void)?
     var onOpenFolder: (() -> Void)?
-    var onCopyLatestTranscriptPath: (() -> Void)?
+    var onCopyLastTranscriptPath: (() -> Void)?
     var onOpenRecording: ((URL) -> Void)?
     var onQuit: (() -> Void)?
 
@@ -285,7 +285,7 @@ final class MenuBarController {
 
     @objc private func toggleClicked() { onToggle?() }
     @objc private func openFolderClicked() { onOpenFolder?() }
-    @objc private func copyLatestTranscriptPathClicked() { onCopyLatestTranscriptPath?() }
+    @objc private func copyLatestTranscriptPathClicked() { onCopyLastTranscriptPath?() }
     @objc private func quitClicked() { onQuit?() }
 }
 

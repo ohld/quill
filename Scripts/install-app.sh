@@ -90,7 +90,11 @@ codesign --force --deep --sign - --identifier com.ohld.quill \
 if [ "${SERVICE_REGISTERED}" = true ]; then
     launchctl kickstart "${SERVICE}"
     RESTARTED=false
-    for _ in 1 2 3 4 5; do
+    # A freshly re-signed bundle can remain in launchd's xpcproxy/startup
+    # states for longer than five seconds even though it starts successfully.
+    # Poll long enough to avoid reporting a false installation failure; the
+    # normal path still returns as soon as the service reaches running.
+    for _ in {1..20}; do
         if launchctl print "${SERVICE}" 2>/dev/null | grep -q 'state = running'; then
             RESTARTED=true
             break

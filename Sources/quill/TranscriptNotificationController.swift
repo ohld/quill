@@ -47,7 +47,7 @@ struct TranscriptNotificationPresentation: Equatable {
     }
 
     private static func transcriptPreview(from sessionDir: URL) -> String? {
-        let url = sessionDir.appendingPathComponent("transcript.json")
+        let url = TranscriptFiles.completionMarker(in: sessionDir)
         guard
             let data = try? Data(contentsOf: url),
             let transcript = try? JSONDecoder().decode(Transcript.self, from: data),
@@ -66,6 +66,11 @@ struct TranscriptNotificationPresentation: Equatable {
     }
 }
 
+enum TranscriptNotificationResponse: Equatable {
+    case open(sessionDir: URL)
+    case copyPath(transcript: URL)
+}
+
 /// Native notifications owned by Quill itself. Unlike `osascript`, clicks and
 /// action buttons are delivered back to this process, so they can reveal the
 /// exact transcript in Finder.
@@ -73,6 +78,7 @@ struct TranscriptNotificationPresentation: Equatable {
 final class TranscriptNotificationController: NSObject, UNUserNotificationCenterDelegate {
     nonisolated private static let categoryID = "TRANSCRIPT_READY"
     nonisolated private static let openActionID = "OPEN_TRANSCRIPT_IN_FINDER"
+    nonisolated private static let copyPathActionID = "COPY_TRANSCRIPT_PATH"
     nonisolated private static let sessionPathKey = "sessionPath"
 
     private let center: UNUserNotificationCenter
@@ -85,10 +91,15 @@ final class TranscriptNotificationController: NSObject, UNUserNotificationCenter
             title: "Открыть в Finder",
             options: [.foreground]
         )
+        let copyPath = UNNotificationAction(
+            identifier: Self.copyPathActionID,
+            title: "Скопировать полный путь",
+            options: []
+        )
         center.setNotificationCategories([
             UNNotificationCategory(
                 identifier: Self.categoryID,
-                actions: [open],
+                actions: [open, copyPath],
                 intentIdentifiers: [],
                 options: []
             ),
@@ -172,24 +183,40 @@ final class TranscriptNotificationController: NSObject, UNUserNotificationCenter
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         defer { completionHandler() }
-        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier
-                || response.actionIdentifier == Self.openActionID,
-              let sessionDir = Self.actionTarget(
-                userInfo: response.notification.request.content.userInfo
-              )
-        else { return }
-        DispatchQueue.main.async { [sessionDir] in
-            let transcript = sessionDir.appendingPathComponent("transcript.md")
-            if FileManager.default.fileExists(atPath: transcript.path) {
-                NSWorkspace.shared.activateFileViewerSelecting([transcript])
-            } else {
-                NSWorkspace.shared.open(sessionDir)
+        guard let action = Self.responseAction(
+            identifier: response.actionIdentifier,
+            userInfo: response.notification.request.content.userInfo
+        ) else { return }
+
+        DispatchQueue.main.async {
+            switch action {
+            case .open(let sessionDir):
+                let transcript = TranscriptFiles.markdown(in: sessionDir)
+                if FileManager.default.fileExists(atPath: transcript.path) {
+                    NSWorkspace.shared.activateFileViewerSelecting([transcript])
+                } else {
+                    NSWorkspace.shared.open(sessionDir)
+                }
+            case .copyPath(let transcript):
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(transcript.path, forType: .string)
             }
         }
     }
 
-    nonisolated static func actionTarget(userInfo: [AnyHashable: Any]) -> URL? {
+    nonisolated static func responseAction(
+        identifier: String,
+        userInfo: [AnyHashable: Any]
+    ) -> TranscriptNotificationResponse? {
         guard let path = userInfo[sessionPathKey] as? String else { return nil }
-        return URL(fileURLWithPath: path, isDirectory: true)
+        let sessionDir = URL(fileURLWithPath: path, isDirectory: true)
+        switch identifier {
+        case UNNotificationDefaultActionIdentifier, openActionID:
+            return .open(sessionDir: sessionDir)
+        case copyPathActionID:
+            return .copyPath(transcript: TranscriptFiles.markdown(in: sessionDir))
+        default:
+            return nil
+        }
     }
 }

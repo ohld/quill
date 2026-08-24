@@ -10,7 +10,8 @@ file at `~/Recordings/latest-transcript.md`.
 - Native browser-based Meet and Zoom call-presence suggestions from application
   windows plus per-process input/output stream state. Suggestions never start
   or stop recording automatically.
-- Five-second completion popover with a direct Finder action.
+- Native completion notification with Finder and exact-session path-copy
+  actions, plus a five-second tray fallback when alerts are unavailable.
 - Separate microphone and system-audio tracks.
 - Local multilingual Parakeet v3 transcription with no external service.
 - `me` / `remote` role attribution, timestamp merge, acoustic-echo filtering,
@@ -48,13 +49,30 @@ file at `~/Recordings/latest-transcript.md`.
 - Telegram participant speech state requires a separate authenticated TDLib
   client; app process/audio activity alone cannot reveal a person's name.
 
-## Public release gate
+## Public source gate
 
 Current decision: keep this repository private and optimize it for personal
-daily use. The following is deliberately deferred, but becomes mandatory
-before changing repository visibility or distributing binaries.
+daily use until the owner explicitly changes visibility. The source can later
+be published under MIT as an explicitly attributed experimental derivative of
+`digimata/quill`; it does not need to be reconstructed as a GitHub-network
+fork first because the upstream ancestry is already preserved.
 
-Before publishing source or binaries:
+Before changing repository visibility:
+
+1. Merge the intended release branch into the default branch and update the
+   GitHub description, which still mentions the removed Spokenly backend.
+2. Review the complete Git history and run an automated secret scan, because
+   making a private repository public exposes past commits as well as current
+   files.
+3. Keep `LICENSE`, `COPYRIGHT`, `THIRD_PARTY_NOTICES.md`, and
+   `MODEL_NOTICES.md`; describe the project prominently as a fork.
+4. Add one current tray/notification screenshot and a short tested install
+   path before inviting other users.
+
+## Independent product/binary gate
+
+The following is mandatory before distributing a downloadable `.app` or
+presenting the project as an independent product rather than a source fork.
 
 1. Rename the product, executable, bundle identifiers, config paths, and
    LaunchAgent after a name-clearance check. `Quill` is already used by another

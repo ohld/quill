@@ -274,15 +274,15 @@ struct Transcript: Codable {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let markdown = Data(rendered(title: dir.lastPathComponent).utf8)
         try markdown.write(
-            to: dir.appendingPathComponent("transcript.md"),
+            to: TranscriptFiles.markdown(in: dir),
             options: .atomic
         )
         try markdown.write(
-            to: dir.deletingLastPathComponent().appendingPathComponent("latest-transcript.md"),
+            to: TranscriptFiles.stableLatest(in: dir.deletingLastPathComponent()),
             options: .atomic
         )
         try encoder.encode(self).write(
-            to: dir.appendingPathComponent("transcript.json"),
+            to: TranscriptFiles.completionMarker(in: dir),
             options: .atomic
         )
     }

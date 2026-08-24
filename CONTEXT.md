@@ -30,8 +30,9 @@ transcript with no file shuffling or cloud transcription dependency.
 5. One immutable configuration snapshot is used for the process lifetime.
 6. Final transcription is built-in FluidAudio Parakeet v3 and stays local.
    There is no Spokenly or other external transcription backend.
-7. Native notification and tray fallback are mutually exclusive. Finder
-   actions target the exact completed session.
+7. Native notification and tray fallback are mutually exclusive. Finder and
+   copy-path actions target the immutable `transcript.md` inside the exact
+   completed session, never the mutable `latest-transcript.md` projection.
 
 ## Product boundaries
 
@@ -41,6 +42,7 @@ transcript with no file shuffling or cloud transcription dependency.
   stop automatically.
 - Live captions and participant-aware platform integrations are future opt-in
   features; they cannot replace the canonical local post-call transcript.
-- The current name and feather branding are acceptable only for private use.
-  Rebranding all product namespaces is a release gate before public source or
-  binary distribution; see `ROADMAP.md`.
+- The current name and feather branding are acceptable for private use and for
+  source published explicitly as an experimental fork. Rebranding product
+  namespaces remains a gate before distributing or marketing an independent
+  binary; see `PUBLISHING.md` and `ROADMAP.md`.

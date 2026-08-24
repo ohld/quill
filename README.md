@@ -1,12 +1,28 @@
-# quill
+# quill — multilingual local meeting recorder for macOS
 
 A minimal, local-first macOS meeting recorder + transcriber. One menu-bar
 click records your mic and all system audio as two separate tracks; when you
 stop, quill transcribes both and writes a speaker-tagged transcript. The
 speech model stays on-device.
 
-Named for the feather. Sibling of [parrot](https://github.com/digimata/parrot),
-with a single Swift executable packaged as a signed menu-bar app.
+This is an experimental personal fork of Andrew Jones's
+[`digimata/quill`](https://github.com/digimata/quill), distributed under the
+same MIT license. It keeps the upstream feather identity while focusing on a
+reliable Russian/English workflow on macOS 14.2+: press Record, finish the
+call, and paste the exact transcript path into an AI agent.
+
+## What this fork adds
+
+- Multilingual Parakeet v3 transcription, including Russian and English.
+- A signed menu-bar `.app` with a stable local identity, icon, login launch,
+  notification permissions, and no repeated TCC prompts after rebuilds.
+- Separate mic/system tracks, timestamp alignment, role labels, readable
+  Markdown, and acoustic-echo filtering.
+- Native transcript-ready actions: reveal the exact session in Finder or copy
+  its immutable full path.
+- Conservative Meet/Zoom start and stop suggestions using native macOS window
+  and audio-stream state, with no browser extension and no automatic recording.
+- A durable filesystem queue that resumes interrupted transcription jobs.
 
 ## Install
 
@@ -38,9 +54,11 @@ transcription speed.
    the recording start time, a transcript preview, and **Open in Finder** when
    the transcript is ready. If macOS notifications are unavailable, a compact
    popover attached to the feather provides the same Finder action instead;
-   the two are never shown together. **Copy Last Transcript Path** in the menu
-   copies the absolute path to stable `~/Recordings/latest-transcript.md`, ready
-   to paste into an agent or another app.
+   the two are never shown together. The notification offers both **Open in
+   Finder** and **Copy Full Path**. The notification and **Copy Last Transcript
+   Path** menu item copy the immutable file inside that exact session folder,
+   such as `~/Recordings/2026.08.24-1530/transcript.md`, ready to paste into an
+   agent or another app.
 
 When a detected call's application audio streams close, Quill offers **Stop
 and transcribe** after a short debounce. This observes stream lifecycle rather
@@ -61,8 +79,9 @@ Each session lands in `~/Recordings/<yyyy.MM.dd-HHmm>/`:
 | `transcribe.log` | transcription progress/errors for this session |
 
 The recordings root also contains `latest-transcript.md`: an atomically
-updated copy of the newest readable transcript, intended as the one stable
-path to hand to another agent or workflow.
+updated convenience copy for automations that deliberately need one stable
+path. User-facing copy actions use the session-specific file instead, so a
+later transcription cannot change what a previously copied path points to.
 
 Two tracks on purpose: speech models do better on clean single-source audio,
 and mic-vs-system is free two-party diarization — `me` vs `them` with no
@@ -152,8 +171,11 @@ license texts into the app bundle.
 
 This is an independent fork and is not affiliated with Andrew Jones,
 Quill Notes, NVIDIA, FluidInference, or Lucide. Before a public
-release, use a new clearance-checked product name: another Mac meeting
-recorder already uses the `Quill` name. See [`ROADMAP.md`](ROADMAP.md).
+binary release or presenting it as an independent product, use a new
+clearance-checked name: another Mac meeting recorder already uses the `Quill`
+name. Publishing source as an explicitly attributed experimental fork is a
+separate, lower-risk step. See [`PUBLISHING.md`](PUBLISHING.md) and
+[`ROADMAP.md`](ROADMAP.md).
 
 Recording laws and workplace policies vary. Obtain any consent required for
 recording, transcription, or cloud processing, and protect recordings and
