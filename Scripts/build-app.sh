@@ -70,6 +70,7 @@ if [ "${SIGN_IDENTITY}" = "-" ]; then
     fi
 else
     codesign --force --deep --options runtime --timestamp \
+        --entitlements "${REPO_DIR}/Packaging/Quill.entitlements" \
         --sign "${SIGN_IDENTITY}" "${APP_DIR}"
 fi
 
