@@ -73,6 +73,52 @@ final class TranscriptPostProcessingTests: XCTestCase {
         )
     }
 
+    func testPunctuationOnlyMicResidueIsDroppedDuringSystemSpeech() {
+        let segments = [
+            segment("Call", 0, 1_000, "Продолжаем разговор"),
+            segment("Dan", 200, 300, "...?!"),
+        ]
+
+        let filtered = EchoFilter.dropEchoes(
+            segments,
+            micSpeaker: "Dan",
+            systemSpeaker: "Call"
+        )
+
+        XCTAssertEqual(filtered.map(\.speaker), ["Call"])
+    }
+
+    func testVeryShortMicPhraseRequiresCompleteMatchToBeAnEcho() {
+        let segments = [
+            segment("Call", 0, 1_000, "да конечно"),
+            segment("Dan", 100, 900, "да нет"),
+        ]
+
+        let filtered = EchoFilter.dropEchoes(
+            segments,
+            micSpeaker: "Dan",
+            systemSpeaker: "Call"
+        )
+
+        XCTAssertEqual(filtered.count, 2)
+    }
+
+    func testNoSystemTrackLeavesMicSegmentsUntouched() {
+        let segments = [
+            segment("Dan", 0, 100, "..."),
+            segment("Dan", 200, 500, "Только микрофон"),
+        ]
+
+        XCTAssertEqual(
+            EchoFilter.dropEchoes(
+                segments,
+                micSpeaker: "Dan",
+                systemSpeaker: "Call"
+            ).map(\.text),
+            segments.map(\.text)
+        )
+    }
+
     func testWordSegmentsBecomeReadableUtterances() {
         let segments = [
             segment("Dan", 0, 100, "Ну,"),
@@ -89,6 +135,34 @@ final class TranscriptPostProcessingTests: XCTestCase {
         XCTAssertEqual(grouped.map(\.speaker), ["Dan", "Dan", "Call"])
         XCTAssertEqual(grouped[0].start_ms, 0)
         XCTAssertEqual(grouped[0].end_ms, 600)
+    }
+
+    func testUtteranceGapBoundaryMergesAtLimitAndSplitsBeyondIt() {
+        let segments = [
+            segment("Dan", 0, 100, "one"),
+            segment("Dan", 1_300, 1_400, "two"),
+            segment("Dan", 2_601, 2_700, "three"),
+        ]
+
+        let grouped = UtteranceGrouper.group(segments)
+
+        XCTAssertEqual(grouped.map(\.text), ["one two", "three"])
+    }
+
+    func testEmptyTokensDoNotIntroduceSpacesOrLoseTiming() {
+        let segments = [
+            segment("Dan", 0, 100, "   "),
+            segment("Dan", 110, 200, "Привет"),
+            segment("Dan", 210, 300, " \n "),
+            segment("Dan", 310, 400, "!"),
+        ]
+
+        let grouped = UtteranceGrouper.group(segments)
+
+        XCTAssertEqual(grouped.count, 1)
+        XCTAssertEqual(grouped[0].text, "Привет!")
+        XCTAssertEqual(grouped[0].start_ms, 0)
+        XCTAssertEqual(grouped[0].end_ms, 400)
     }
 
     func testTranscriptWritesStableLatestFileAndCompletionMarker() throws {

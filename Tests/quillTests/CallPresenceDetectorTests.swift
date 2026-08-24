@@ -80,6 +80,51 @@ final class CallPresenceDetectorTests: XCTestCase {
         )
     }
 
+    func testLostStartSignalsResetTheCandidateDelay() {
+        var machine = CallPresenceStateMachine(startDelay: 2, endDelay: 4)
+        let meet = snapshot(meet: (true, true, true))
+
+        XCTAssertNil(machine.update(meet, at: origin))
+        XCTAssertNil(machine.update(.empty, at: origin.addingTimeInterval(1)))
+        XCTAssertNil(machine.update(meet, at: origin.addingTimeInterval(2)))
+        XCTAssertNil(machine.update(meet, at: origin.addingTimeInterval(3.9)))
+        XCTAssertEqual(
+            machine.update(meet, at: origin.addingTimeInterval(4)),
+            .started(.googleMeet)
+        )
+    }
+
+    func testSwitchingStartCandidateRestartsDelayForNewPlatform() {
+        var machine = CallPresenceStateMachine(startDelay: 2, endDelay: 4)
+        let meet = snapshot(meet: (true, true, true))
+        let zoom = snapshot(zoom: (true, true, true))
+
+        XCTAssertNil(machine.update(meet, at: origin))
+        XCTAssertNil(machine.update(zoom, at: origin.addingTimeInterval(1)))
+        XCTAssertNil(machine.update(zoom, at: origin.addingTimeInterval(2.9)))
+        XCTAssertEqual(
+            machine.update(zoom, at: origin.addingTimeInterval(3)),
+            .started(.zoom)
+        )
+    }
+
+    func testEndedCallCanBeFollowedByASeparatelyDebouncedNewPlatform() {
+        var machine = activeMeetMachine()
+        let zoom = snapshot(zoom: (true, true, true))
+
+        XCTAssertNil(machine.update(zoom, at: origin.addingTimeInterval(3)))
+        XCTAssertEqual(
+            machine.update(zoom, at: origin.addingTimeInterval(7)),
+            .ended(.googleMeet)
+        )
+        XCTAssertNil(machine.update(zoom, at: origin.addingTimeInterval(7.1)))
+        XCTAssertNil(machine.update(zoom, at: origin.addingTimeInterval(9)))
+        XCTAssertEqual(
+            machine.update(zoom, at: origin.addingTimeInterval(9.2)),
+            .started(.zoom)
+        )
+    }
+
     func testMeetWindowTitleMatchingIsConservativeAndHandlesZenTitle() {
         XCTAssertTrue(NativeCallObservation.isMeetWindowTitle("Meet\u{00a0}– Dan and Albert"))
         XCTAssertTrue(NativeCallObservation.isMeetWindowTitle("Google Meet"))

@@ -42,6 +42,55 @@ final class ConfigTests: XCTestCase {
         XCTAssertTrue(config.transcriptEchoFilter)
         XCTAssertNil(config.onStop)
     }
+
+    func testInvalidJSONFallsBackToExplicitDefaults() throws {
+        let fixture = try TemporaryConfig("{ definitely not JSON")
+        let fallback = fixture.directory.appendingPathComponent("fallback", isDirectory: true)
+
+        let config = Config.load(from: fixture.url, defaultRoot: fallback)
+
+        XCTAssertEqual(config.recordingsRoot, fallback)
+        XCTAssertTrue(config.transcriptionEnabled)
+        XCTAssertEqual(config.speakerNames, .init(mic: "me", system: "them"))
+        XCTAssertFalse(config.micVoiceProcessing)
+        XCTAssertTrue(config.transcriptEchoFilter)
+        XCTAssertNil(config.onStop)
+    }
+
+    func testBlankStringsDoNotOverrideUsefulDefaultsOrConfiguredRoot() throws {
+        let fixture = try TemporaryConfig(
+            """
+            {
+              "recordings_dir": "/tmp/from-file",
+              "speaker_names": { "mic": "  ", "system": "   " },
+              "on_stop": "   "
+            }
+            """
+        )
+
+        let config = Config.load(cliOverride: " \n ", from: fixture.url)
+
+        XCTAssertEqual(config.recordingsRoot.path, "/tmp/from-file")
+        XCTAssertEqual(config.speakerNames, .init(mic: "me", system: "them"))
+        XCTAssertNil(config.onStop)
+    }
+
+    func testTildePathsExpandForFileAndCLIValues() throws {
+        let fixture = try TemporaryConfig("{ \"recordings_dir\": \"~/from-file\" }")
+        let home = FileManager.default.homeDirectoryForCurrentUser
+
+        let fileConfig = Config.load(from: fixture.url)
+        let cliConfig = Config.load(cliOverride: "~/from-cli", from: fixture.url)
+
+        XCTAssertEqual(
+            fileConfig.recordingsRoot.standardizedFileURL,
+            home.appendingPathComponent("from-file", isDirectory: true).standardizedFileURL
+        )
+        XCTAssertEqual(
+            cliConfig.recordingsRoot.standardizedFileURL,
+            home.appendingPathComponent("from-cli", isDirectory: true).standardizedFileURL
+        )
+    }
 }
 
 private final class TemporaryConfig {

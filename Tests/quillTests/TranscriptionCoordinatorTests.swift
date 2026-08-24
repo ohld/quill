@@ -73,6 +73,79 @@ final class TranscriptionCoordinatorTests: XCTestCase {
         )
         XCTAssertEqual(fixture.progressSummary.last, "idle")
     }
+
+    func testResumePendingProcessesOnlyUnfinishedSessionsOldestFirst() async throws {
+        let fixture = try Fixture(failingSessions: [])
+        defer { fixture.remove() }
+        _ = try fixture.session("2026.08.24-1100")
+        let completed = try fixture.session("2026.08.24-1200")
+        _ = try fixture.session("2026.08.24-1000")
+        try Data("already done".utf8).write(
+            to: completed.appendingPathComponent("transcript.json")
+        )
+        let unfinalized = fixture.root.appendingPathComponent(
+            "2026.08.24-0900",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: unfinalized,
+            withIntermediateDirectories: true
+        )
+        try Data().write(to: unfinalized.appendingPathComponent("mic.caf"))
+
+        await fixture.observe()
+        await fixture.coordinator.resumePending(root: fixture.root)
+        try await fixture.waitForOutcomes(2)
+
+        XCTAssertEqual(
+            fixture.outcomeSummary,
+            ["succeeded:2026.08.24-1000", "succeeded:2026.08.24-1100"]
+        )
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: unfinalized.appendingPathComponent("transcript.json").path
+        ))
+    }
+
+    func testEnqueueDuringResumedSessionDoesNotDuplicateIt() async throws {
+        let fixture = try Fixture(failingSessions: [], delay: .milliseconds(100))
+        defer { fixture.remove() }
+        let session = try fixture.session("resumed")
+
+        await fixture.observe()
+        await fixture.coordinator.resumePending(root: fixture.root)
+        try await fixture.waitForTranscribing("resumed")
+        await fixture.coordinator.enqueue(session)
+        try await fixture.waitForOutcomes(1)
+
+        XCTAssertEqual(fixture.outcomeSummary, ["succeeded:resumed"])
+        XCTAssertEqual(
+            fixture.progressSummary.filter { $0 == "transcribing:resumed" }.count,
+            1
+        )
+    }
+
+    func testOneBadTrackStillProducesTranscriptFromTheOtherTrack() async throws {
+        let fixture = try Fixture(
+            failingSessions: [],
+            failingFiles: ["mic.caf"]
+        )
+        defer { fixture.remove() }
+        let session = try fixture.session("partial", tracks: [.mic, .system])
+
+        await fixture.enqueue([session])
+        try await fixture.waitForOutcomes(1)
+
+        XCTAssertEqual(fixture.outcomeSummary, ["succeeded:partial"])
+        let transcript = try JSONDecoder().decode(
+            Transcript.self,
+            from: Data(contentsOf: session.appendingPathComponent("transcript.json"))
+        )
+        XCTAssertEqual(transcript.segments.map(\.speaker), ["them"])
+        XCTAssertTrue(
+            try String(contentsOf: session.appendingPathComponent("transcribe.log"))
+                .contains("skipping mic.caf")
+        )
+    }
 }
 
 private final class Fixture: @unchecked Sendable {
@@ -80,11 +153,19 @@ private final class Fixture: @unchecked Sendable {
     let coordinator: TranscriptionCoordinator
     private let events = EventLog()
 
-    init(failingSessions: Set<String>, delay: Duration = .milliseconds(25)) throws {
+    init(
+        failingSessions: Set<String>,
+        failingFiles: Set<String> = [],
+        delay: Duration = .milliseconds(25)
+    ) throws {
         root = FileManager.default.temporaryDirectory
             .appendingPathComponent("quill-coordinator-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let engine = FakeEngine(failingSessions: failingSessions, delay: delay)
+        let engine = FakeEngine(
+            failingSessions: failingSessions,
+            failingFiles: failingFiles,
+            delay: delay
+        )
         coordinator = TranscriptionCoordinator(
             config: AppConfig(
                 recordingsRoot: root,
@@ -101,24 +182,35 @@ private final class Fixture: @unchecked Sendable {
     var outcomeSummary: [String] { events.outcomeSummary }
     var progressSummary: [String] { events.progressSummary }
 
-    func session(_ name: String) throws -> URL {
+    func session(
+        _ name: String,
+        tracks kinds: [RecordingMetadata.Track.Kind] = [.mic]
+    ) throws -> URL {
         let dir = root.appendingPathComponent(name, isDirectory: true).standardizedFileURL
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try Data().write(to: dir.appendingPathComponent("mic.caf"))
+        let tracks = try kinds.map { kind -> RecordingMetadata.Track in
+            let file = "\(kind.rawValue).caf"
+            try Data().write(to: dir.appendingPathComponent(file))
+            return .init(kind: kind, file: file, offsetMilliseconds: 0)
+        }
         try RecordingMetadata(
             startedAt: nil,
             endedAt: nil,
             durationSeconds: nil,
-            tracks: [.init(kind: .mic, file: "mic.caf", offsetMilliseconds: 0)]
+            tracks: tracks
         ).write(to: dir)
         return dir
+    }
+
+    func observe() async {
+        await coordinator.setProgressHandler { [events] in events.record($0) }
+        await coordinator.setOutcomeHandler { [events] in events.record($0) }
     }
 
     func enqueue(_ sessions: [URL]) async {
         // Ensure handlers are installed before the first enqueue. The setter
         // calls and enqueue all serialize through the coordinator actor.
-        await coordinator.setProgressHandler { [events] in events.record($0) }
-        await coordinator.setOutcomeHandler { [events] in events.record($0) }
+        await observe()
         for session in sessions {
             await coordinator.enqueue(session)
         }
@@ -192,10 +284,16 @@ private final class FakeEngine: TranscriptionEngine, @unchecked Sendable {
     let name = "fake"
     let model = "test"
     private let failingSessions: Set<String>
+    private let failingFiles: Set<String>
     private let delay: Duration
 
-    init(failingSessions: Set<String>, delay: Duration) {
+    init(
+        failingSessions: Set<String>,
+        failingFiles: Set<String>,
+        delay: Duration
+    ) {
         self.failingSessions = failingSessions
+        self.failingFiles = failingFiles
         self.delay = delay
     }
 
@@ -203,7 +301,8 @@ private final class FakeEngine: TranscriptionEngine, @unchecked Sendable {
 
     func transcribe(_ audio: URL) async throws -> [TranscriptSegment] {
         try await Task.sleep(for: delay)
-        if failingSessions.contains(audio.deletingLastPathComponent().lastPathComponent) {
+        if failingSessions.contains(audio.deletingLastPathComponent().lastPathComponent)
+            || failingFiles.contains(audio.lastPathComponent) {
             throw FakeFailure()
         }
         return [TranscriptSegment(start: 0, end: 1, text: "Готово")]
