@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify tag matches app version
+        run: |
+          test "$(uname -m)" = "arm64"
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Packaging/Info.plist)"
+          test "${GITHUB_REF_NAME}" = "v${VERSION}"
+      - name: Test
+        run: swift test
+      - name: Package app
+        run: Scripts/package-release.sh
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="$(mktemp)"
+          # Markdown backticks are intentionally literal.
+          # shellcheck disable=SC2016
+          printf '%s\n' \
+            'Download `Quill-arm64.zip`, move `Quill.app` to Applications, then use Right click → Open for the first launch.' \
+            '' \
+            'This experimental fork is ad-hoc signed, not Apple-notarized. It requires macOS 14.2+ on Apple Silicon.' \
+            '' \
+            'See CHANGELOG.md and README.md for changes and usage.' > "${NOTES}"
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" \
+              dist/Quill-arm64.zip dist/SHA256SUMS.txt --clobber
+            gh release edit "${GITHUB_REF_NAME}" \
+              --title "Quill ${GITHUB_REF_NAME}" \
+              --notes-file "${NOTES}"
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              dist/Quill-arm64.zip dist/SHA256SUMS.txt \
+              --verify-tag \
+              --title "Quill ${GITHUB_REF_NAME}" \
+              --notes-file "${NOTES}"
+          fi

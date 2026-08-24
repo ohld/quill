@@ -1,6 +1,6 @@
 # Quill project context
 
-Quill is currently a private, personal macOS menu-bar tool. Its one job is to
+Quill is a personal macOS menu-bar tool published as an experimental fork. Its one job is to
 turn a manually started call recording into one local, role-labelled Markdown
 transcript with no file shuffling or cloud transcription dependency.
 
@@ -42,7 +42,7 @@ transcript with no file shuffling or cloud transcription dependency.
   stop automatically.
 - Live captions and participant-aware platform integrations are future opt-in
   features; they cannot replace the canonical local post-call transcript.
-- The current name and feather branding are acceptable for private use and for
-  source published explicitly as an experimental fork. Rebranding product
-  namespaces remains a gate before distributing or marketing an independent
-  binary; see `PUBLISHING.md` and `ROADMAP.md`.
+- The current name and feather branding are acceptable only while the source
+  and convenience binary are clearly labelled as an experimental community
+  fork. Rebranding product namespaces remains a gate before distributing or
+  marketing an independent product; see `PUBLISHING.md` and `ROADMAP.md`.

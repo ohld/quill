@@ -1,0 +1,15 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  swift:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests
+        run: swift test
+      - name: Build release app
+        run: Scripts/package-release.sh

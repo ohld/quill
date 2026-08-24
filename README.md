@@ -1,198 +1,107 @@
-# quill — multilingual local meeting recorder for macOS
+# Quill — local multilingual meeting transcription for macOS
 
-A minimal, local-first macOS meeting recorder + transcriber. One menu-bar
-click records your mic and all system audio as two separate tracks; when you
-stop, quill transcribes both and writes a speaker-tagged transcript. The
-speech model stays on-device.
+An unofficial fork of [digimata/quill](https://github.com/digimata/quill),
+adapted by [Daniil Okhlopkov](https://github.com/ohld) for Russian and
+multilingual calls.
 
-This is an experimental personal fork of Andrew Jones's
-[`digimata/quill`](https://github.com/digimata/quill), distributed under the
-same MIT license. It keeps the upstream feather identity while focusing on a
-reliable Russian/English workflow on macOS 14.2+: press Record, finish the
-call, and paste the exact transcript path into an AI agent.
+Quill lives in the menu bar. Start a recording, finish the call, and receive
+one local Markdown transcript with `me` / `remote` roles. Audio and speech
+recognition stay on your Mac.
+
+[Download Quill for Apple Silicon](https://github.com/ohld/quill/releases/latest/download/Quill-arm64.zip)
+· [Latest release](https://github.com/ohld/quill/releases/latest)
+· [Original project and technical README](https://github.com/digimata/quill)
 
 ## What this fork adds
 
-- Multilingual Parakeet v3 transcription, including Russian and English.
-- A signed menu-bar `.app` with a stable local identity, icon, login launch,
-  notification permissions, and no repeated TCC prompts after rebuilds.
-- Separate mic/system tracks, timestamp alignment, role labels, readable
-  Markdown, and acoustic-echo filtering.
-- Native transcript-ready actions: reveal the exact session in Finder or copy
-  its immutable full path.
-- Conservative Meet/Zoom start and stop suggestions using native macOS window
-  and audio-stream state, with no browser extension and no automatic recording.
-- A durable filesystem queue that resumes interrupted transcription jobs.
+- Multilingual Parakeet TDT 0.6B v3 transcription, including Russian and English.
+- A compact menu-bar app with a red recording indicator and source-health status.
+- Separate microphone and system-audio tracks, merged by time into one transcript.
+- Native transcript-ready alerts with **Open in Finder** and **Copy Full Path**.
+- Meet and Zoom start/stop suggestions using macOS signals, without a browser extension.
+- Durable local transcription queue, readable Markdown, timed JSON, and acoustic-echo filtering.
 
 ## Install
+
+Requires **macOS 14.2+ on Apple Silicon**.
+
+1. [Download `Quill-arm64.zip`](https://github.com/ohld/quill/releases/latest/download/Quill-arm64.zip).
+2. Unzip it and move `Quill.app` to `/Applications`.
+3. On first launch, right-click Quill and choose **Open**, then confirm **Open**.
+4. Allow Microphone, System Audio Recording, and Notifications when macOS asks.
+
+The public build is ad-hoc signed because this fork does not yet have an Apple
+Developer ID certificate. It is verified by CI but not notarized by Apple, so a
+normal double-click may be blocked on first launch. Future builds can become
+one-click installs once Developer ID signing and notarization are configured.
+
+To build from source instead:
 
 ```sh
 ./Scripts/install-app.sh
 ```
 
-This builds and ad-hoc signs `~/Applications/Quill.app`, then installs its
-LaunchAgent. No administrator password is required. Grant Quill Microphone and
-System Audio Recording access on first use.
+This installs `~/Applications/Quill.app` and registers it to launch at login.
 
-**Requires:** macOS 14.2+ (Core Audio process taps for system audio — no
-virtual device, no kernel extension). Apple Silicon recommended for
-transcription speed.
+## Use
 
-## How to use
+1. Click the feather in the menu bar and choose **Start recording**.
+2. Confirm that both **Microphone** and **System audio** become active.
+3. Choose **Stop recording** when the call ends.
+4. Quill transcribes both tracks locally. The notification can reveal the exact
+   transcript in Finder or copy its immutable full path.
 
-1. **Run it** (open `~/Applications/Quill.app`, or let its LaunchAgent start it
-   at login).
-2. **Click the feather in the menu bar → Start recording.** First use prompts
-   for microphone and System Audio Recording permissions. While recording, the
-   feather becomes red, macOS shows the purple recording
-   indicator, and the menu shows elapsed time plus live mic/system-audio status.
-   Quill can also recognize a likely Google Meet in a browser or a Zoom call from
-   native macOS window and per-process audio-stream state, then offer this same
-   manual Start action in a tray popup. It never starts recording by itself.
-3. **Click → Stop recording** when the meeting ends. Transcription starts
-   automatically (the menu shows progress). A native Quill notification shows
-   the recording start time, a transcript preview, and **Open in Finder** when
-   the transcript is ready. If macOS notifications are unavailable, a compact
-   popover attached to the feather provides the same Finder action instead;
-   the two are never shown together. The notification offers both **Open in
-   Finder** and **Copy Full Path**. The notification and **Copy Last Transcript
-   Path** menu item copy the immutable file inside that exact session folder,
-   such as `~/Recordings/2026.08.24-1530/transcript.md`, ready to paste into an
-   agent or another app.
+Each call is stored separately:
 
-When a detected call's application audio streams close, Quill offers **Stop
-and transcribe** after a short debounce. This observes stream lifecycle rather
-than speech or silence, never stops automatically, and needs no browser
-extension or network service. Browser audio belongs to the whole browser, not
-an individual tab, so Meet suggestions intentionally require both a Meet-titled
-window and active Zen input/output streams.
+```text
+~/Recordings/2026.08.24-1530/
+├── mic.caf
+├── system.caf
+├── meta.json
+├── transcript.json
+├── transcript.md
+└── transcribe.log
+```
 
-Each session lands in `~/Recordings/<yyyy.MM.dd-HHmm>/`:
+`mic.caf` is your microphone; `system.caf` is the sound played by the Mac.
+Transcribing them separately gives reliable two-role separation without asking
+a diarization model to guess who is local. The first transcription downloads
+the Parakeet Core ML model; later transcription is fully local.
 
-| File | Contents |
-|---|---|
-| `mic.caf` | your side (default input device, AAC) |
-| `system.caf` | everything the Mac played — the other side of the call (AAC) |
-| `meta.json` | start/end timestamps, duration, per-track start offsets |
-| `transcript.json` | canonical transcript — engine provenance + timed, speaker-tagged segments |
-| `transcript.md` | the same transcript rendered for reading |
-| `transcribe.log` | transcription progress/errors for this session |
+Quill may suggest starting when it detects an active Meet or Zoom call and
+stopping when the call's audio streams close. These are suggestions only. It
+never starts or stops recording automatically.
 
-The recordings root also contains `latest-transcript.md`: an atomically
-updated convenience copy for automations that deliberately need one stable
-path. User-facing copy actions use the session-specific file instead, so a
-later transcription cannot change what a previously copied path points to.
+## Optional config
 
-Two tracks on purpose: speech models do better on clean single-source audio,
-and mic-vs-system is free two-party diarization — `me` vs `them` with no
-speaker-identification model. AAC is streamed into CAF to keep long meetings
-compact. Stop the recording cleanly: the encoder writes the CAF packet table
-on close, and external tools cannot reliably read an actively written file.
-
-## Transcription
-
-Built in, on-device, automatic. This fork defaults to **Parakeet TDT
-0.6B v3** via FluidAudio: multilingual (including Russian), fully local, and
-very fast on Apple Silicon. The model is already cached on this Mac.
-
-Each track is transcribed separately, shifted by its start offset so both
-share one clock, and merged by timestamp. A Unicode-aware echo filter removes
-remote speech that the raw MacBook mic heard from the speakers, so it does not
-appear once as `mic` and again as `system`. Fine-grained timings stay in JSON;
-word-level ASR output is grouped into sentence-sized, role-labelled blocks in
-the Markdown file. Jobs run in a serial queue — you can start a new recording
-while the last one transcribes. Unfinished jobs resume on next launch (the
-filesystem is the queue: a session with `meta.json` but no `transcript.json` is
-pending). Failures append to the session's `transcribe.log` and never block
-later jobs.
-
-## Config
-
-Optional, at `~/.config/quill/config.json`:
+Create `~/.config/quill/config.json` only if you want to change defaults:
 
 ```json
 {
   "recordings_dir": "~/Recordings",
-  "transcription": {
-    "enabled": true
-  },
   "speaker_names": { "mic": "Dan", "system": "Remote" },
-  "transcript_echo_filter": true,
-  "on_stop": "my-hook"
+  "transcript_echo_filter": true
 }
 ```
 
-- `recordings_dir` — where sessions land. Resolution order: `--out` flag >
-  config > `~/Recordings`.
-- `transcription.enabled` — set `false` to just record.
-- `speaker_names` — labels for the dedicated mic and system tracks.
-- `mic_voice_processing` — Apple's echo cancellation on the mic (default off).
-  Set `true` when recording meetings through the speakers, so playback doesn't
-  bleed into the mic track and get transcribed twice as "me". The trade: while
-  the voice unit is live, macOS ducks other playback slightly (`.min` ducking
-  is configured, but it can't be zeroed). On headphones there's no echo to
-  cancel, so raw capture is the better default.
-- `transcript_echo_filter` — remove mic words that duplicate overlapping
-  system speech (default on). Keep it on for laptop-speaker calls; it is a
-  no-op when the mic does not contain system playback.
-- `on_stop` — shell command spawned with the session directory as its
-  argument, **after the transcript is written** (or right after recording if
-  transcription is disabled). Wire it to whatever comes next: summarization,
-  filing, indexing.
+## Notes
 
-## CLI
+- A system tap captures everything the Mac plays, including notification sounds.
+- A browser exposes audio per application, not per tab. Meet detection therefore
+  combines a Meet-titled window with active browser audio streams.
+- A Focus can hide transcript notifications. Add Quill to that Focus's Allowed Apps.
+- Recording and transcription laws vary. Obtain any consent your jurisdiction or
+  workplace requires and protect recordings as sensitive data.
 
-```sh
-quill                        # run the menu-bar daemon (^C to quit)
-quill run --out <dir>        # custom recordings root (default ~/Recordings)
-quill run --start-recording  # launch the tray and begin immediately
-quill record --seconds 10    # one-shot recording for scripts / smoke tests
-quill doctor                 # check permissions, recordings folder, models
-quill install --launch-at-login
-quill install --uninstall
-```
+## License and upstream
 
-## Stack
+This fork remains under the upstream [MIT license](LICENSE) and preserves Andrew
+Jones's copyright notice. Fork changes are copyright Daniil Okhlopkov and their
+respective contributors. See [COPYRIGHT](COPYRIGHT),
+[third-party notices](THIRD_PARTY_NOTICES.md), and
+[model notices](MODEL_NOTICES.md).
 
-- **Swift** — single SPM executable target
-- **Core Audio process tap** (`AudioHardwareCreateProcessTap`, macOS 14.2+) —
-  system audio capture via a private aggregate device
-- **AVAudioEngine** — mic capture
-- **AVAudioFile** — streaming AAC encode into CAF
-- **FluidAudio / Parakeet** — on-device Core ML transcription
-- **NSStatusItem** — the whole UI
-
-## Licensing and public forks
-
-The source remains MIT and preserves the upstream copyright notice. See
-[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) and
-[`MODEL_NOTICES.md`](MODEL_NOTICES.md); the installer copies the full required
-license texts into the app bundle.
-
-This is an independent fork and is not affiliated with Andrew Jones,
-Quill Notes, NVIDIA, FluidInference, or Lucide. Before a public
-binary release or presenting it as an independent product, use a new
-clearance-checked name: another Mac meeting recorder already uses the `Quill`
-name. Publishing source as an explicitly attributed experimental fork is a
-separate, lower-risk step. See [`PUBLISHING.md`](PUBLISHING.md) and
-[`ROADMAP.md`](ROADMAP.md).
-
-Recording laws and workplace policies vary. Obtain any consent required for
-recording, transcription, or cloud processing, and protect recordings and
-transcripts as sensitive data.
-
-## Gotchas
-
-- A global tap records *everything* the Mac plays — notification dings,
-  music, all of it. Don't play Spotify during meetings (or ask for a
-  per-process picker if it bothers you).
-- If recordings come out silent, check System Settings → Privacy & Security →
-  Screen & System Audio Recording.
-- macOS can hide status items when the right side of a notched menu bar is
-  full. Quill uses a compact square item; if it is still absent, hide or move
-  one existing menu extra to make room.
-- A Focus can silence an otherwise authorized notification. Add Quill to
-  **Allowed Apps** for each Focus in which transcript-ready banners should
-  appear; macOS does not let an app grant itself that exception.
-- The binary embeds its Info.plist (`__TEXT,__info_plist`) so TCC can
-  attribute permissions to quill itself when running as a LaunchAgent.
+Quill is an experimental community fork, not an official release of the original
+project and not affiliated with Andrew Jones, NVIDIA, FluidInference, Lucide, or
+other products using the Quill name. For the original architecture and technical
+background, read the [upstream README](https://github.com/digimata/quill#readme).

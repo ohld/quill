@@ -49,30 +49,22 @@ file at `~/Recordings/latest-transcript.md`.
 - Telegram participant speech state requires a separate authenticated TDLib
   client; app process/audio activity alone cannot reveal a person's name.
 
-## Public source gate
+## Public fork and releases
 
-Current decision: keep this repository private and optimize it for personal
-daily use until the owner explicitly changes visibility. The source can later
-be published under MIT as an explicitly attributed experimental derivative of
-`digimata/quill`; it does not need to be reconstructed as a GitHub-network
-fork first because the upstream ancestry is already preserved.
+Current decision: publish this as a GitHub-network fork of `digimata/quill`
+with a tested Apple Silicon archive. Keep the fork relationship, attribution,
+license notices, recording-consent warning, and signing status visible.
 
-Before changing repository visibility:
+Next release work:
 
-1. Merge the intended release branch into the default branch and update the
-   GitHub description, which still mentions the removed Spokenly backend.
-2. Review the complete Git history and run an automated secret scan, because
-   making a private repository public exposes past commits as well as current
-   files.
-3. Keep `LICENSE`, `COPYRIGHT`, `THIRD_PARTY_NOTICES.md`, and
-   `MODEL_NOTICES.md`; describe the project prominently as a fork.
-4. Add one current tray/notification screenshot and a short tested install
-   path before inviting other users.
+1. Add Developer ID signing, hardened runtime, notarization, and stapling.
+2. Verify the download and first-call flow on a second clean Apple Silicon Mac.
+3. Add a current tray/notification screenshot and a short demo recording.
 
-## Independent product/binary gate
+## Independent product gate
 
-The following is mandatory before distributing a downloadable `.app` or
-presenting the project as an independent product rather than a source fork.
+The following is mandatory before presenting the project as an independent
+product rather than an explicitly attributed community fork.
 
 1. Rename the product, executable, bundle identifiers, config paths, and
    LaunchAgent after a name-clearance check. `Quill` is already used by another
@@ -80,6 +72,6 @@ presenting the project as an independent product rather than a source fork.
 2. Preserve upstream authorship and ship all files listed in
    `THIRD_PARTY_NOTICES.md` inside the app bundle.
 3. Add recording-consent and sensitive-data guidance.
-4. Verify the archived `.app` contains license resources and that model-license
-   requirements are met.
+4. Keep verifying that the archived `.app` contains license resources and that
+   model-license requirements are met.
 5. Publish from a non-placeholder contributor identity.
