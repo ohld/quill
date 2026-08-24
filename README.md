@@ -27,13 +27,16 @@ Requires **macOS 14.2+ on Apple Silicon**.
 
 1. [Download `Quill-arm64.zip`](https://github.com/ohld/quill/releases/latest/download/Quill-arm64.zip).
 2. Unzip it and move `Quill.app` to `/Applications`.
-3. On first launch, right-click Quill and choose **Open**, then confirm **Open**.
+3. Try to open Quill once. If macOS blocks it, open **System Settings → Privacy
+   & Security**, scroll to Security, choose **Open Anyway**, then confirm **Open**.
 4. Allow Microphone, System Audio Recording, and Notifications when macOS asks.
 
 The public build is ad-hoc signed because this fork does not yet have an Apple
 Developer ID certificate. It is verified by CI but not notarized by Apple, so a
-normal double-click may be blocked on first launch. Future builds can become
-one-click installs once Developer ID signing and notarization are configured.
+normal double-click may be blocked on first launch. Because an ad-hoc identity
+changes between releases, an update may also ask for capture permissions again.
+Future builds can become one-click installs with stable permissions once
+Developer ID signing and notarization are configured.
 
 To build from source instead:
 

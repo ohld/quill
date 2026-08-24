@@ -30,17 +30,21 @@ jobs:
           # Markdown backticks are intentionally literal.
           # shellcheck disable=SC2016
           printf '%s\n' \
-            'Download `Quill-arm64.zip`, move `Quill.app` to Applications, then use Right click → Open for the first launch.' \
+            'Download `Quill-arm64.zip`, move `Quill.app` to Applications, and try opening it once.' \
             '' \
-            'This experimental fork is ad-hoc signed, not Apple-notarized. It requires macOS 14.2+ on Apple Silicon.' \
+            'If macOS blocks it, use System Settings → Privacy & Security → Open Anyway. This experimental fork is ad-hoc signed, not Apple-notarized.' \
+            '' \
+            'Requires macOS 14.2+ on Apple Silicon. Ad-hoc updates may ask for capture permissions again.' \
             '' \
             'See CHANGELOG.md and README.md for changes and usage.' > "${NOTES}"
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release upload "${GITHUB_REF_NAME}" \
-              dist/Quill-arm64.zip dist/SHA256SUMS.txt --clobber
-            gh release edit "${GITHUB_REF_NAME}" \
-              --title "Quill ${GITHUB_REF_NAME}" \
-              --notes-file "${NOTES}"
+            EXISTING="$(mktemp -d)"
+            gh release download "${GITHUB_REF_NAME}" --dir "${EXISTING}" \
+              --pattern 'Quill-arm64.zip' --pattern 'SHA256SUMS.txt'
+            test -f "${EXISTING}/Quill-arm64.zip"
+            test -f "${EXISTING}/SHA256SUMS.txt"
+            (cd "${EXISTING}" && shasum -a 256 -c SHA256SUMS.txt)
+            echo "Release already has a verified archive; leaving it unchanged."
           else
             gh release create "${GITHUB_REF_NAME}" \
               dist/Quill-arm64.zip dist/SHA256SUMS.txt \

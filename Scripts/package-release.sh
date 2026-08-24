@@ -36,5 +36,5 @@ test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
 (cd "${DIST_DIR}" && shasum -a 256 "${ASSET}" > SHA256SUMS.txt)
 printf 'Packaged Quill %s (%s): %s\n' "${VERSION}" "${ARCH}" "${ARCHIVE}"
 if [ "${QUILL_SIGN_IDENTITY:--}" = "-" ]; then
-    printf 'Note: ad-hoc signed build. First public launch requires Right click → Open.\n'
+    printf 'Note: ad-hoc build. Allow first launch in System Settings → Privacy & Security.\n'
 fi

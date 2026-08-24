@@ -25,9 +25,11 @@ download on first transcription and remain subject to their own CC BY 4.0 notice
 
 ## Signing status
 
-The current release is ad-hoc signed and reproducibly validated with
-`codesign --verify`; it is not Apple-notarized. Users must use **Right click →
-Open** once after moving the app to Applications.
+The current release is ad-hoc signed and validated with `codesign --verify`; it
+is not Apple-notarized. Users must try opening it once, then allow it through
+**System Settings → Privacy & Security → Open Anyway**. Because the public
+signature is bound to each binary hash, later ad-hoc updates may request
+Microphone and System Audio Recording permissions again.
 
 For a frictionless public install, configure all of the following:
 

@@ -4,7 +4,7 @@
 
 ### Added
 
-- Downloadable Apple Silicon menu-bar app with a reproducible GitHub Release pipeline.
+- Downloadable Apple Silicon menu-bar app with an automated tag-based GitHub Release pipeline.
 - Local multilingual Parakeet v3 transcription, including Russian and English.
 - Separate microphone and system-audio tracks merged into one role-labelled transcript.
 - Native Meet and Zoom start/stop suggestions without a browser extension.
