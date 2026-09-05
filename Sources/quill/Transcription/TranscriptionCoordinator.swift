@@ -34,7 +34,7 @@ actor TranscriptionCoordinator {
 
     init(
         config: AppConfig,
-        engineFactory: @escaping @Sendable () -> any TranscriptionEngine = { ParakeetEngine() }
+        engineFactory: @escaping @Sendable () -> any TranscriptionEngine = { SubprocessTranscriptionEngine() }
     ) {
         self.config = config
         self.engineFactory = engineFactory
@@ -153,6 +153,10 @@ actor TranscriptionCoordinator {
             do {
                 segments = try await engine.transcribe(audio)
                 successfulTracks += 1
+            } catch let error as TranscriptionInfrastructureError {
+                // A native worker crash or broken pipe must remain retryable;
+                // a successful companion track cannot mark this session done.
+                throw error
             } catch {
                 log(dir, "skipping \(track.file): \(error)")
                 continue

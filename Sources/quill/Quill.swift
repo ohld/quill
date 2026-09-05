@@ -7,7 +7,7 @@ struct Quill: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "quill",
         abstract: "Local meeting recorder + transcriber. Records mic and system audio as two tracks, then transcribes on-device.",
-        subcommands: [Run.self, RecordOnce.self, Doctor.self, Install.self],
+        subcommands: [Run.self, RecordOnce.self, Doctor.self, Install.self, TranscriptionWorker.self],
         defaultSubcommand: Run.self
     )
 }
