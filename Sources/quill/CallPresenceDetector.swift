@@ -331,6 +331,8 @@ enum NativeCallObservation {
             objectID, &address, 0, nil, &size, &value
         )
         guard status == noErr, let value else { return nil }
-        return value.takeUnretainedValue() as String
+        // Core Audio's bundle-ID property returns an owned CFString; the
+        // AudioHardware.h contract makes the caller responsible for release.
+        return value.takeRetainedValue() as String
     }
 }

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Release native speech-recognition memory when the queue drains by running
+  Parakeet in a local worker process shared by both audio tracks.
+- Fix an owned Core Audio string leak in the idle call detector.
+- Preserve unfinished sessions for retry after a transcription worker crash.
+- Add worker-lifecycle, dual-track speech and opt-in idle-memory checks.
+
 ## [0.1.0] - 2026-08-24
 
 ### Added

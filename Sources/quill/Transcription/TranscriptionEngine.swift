@@ -2,7 +2,7 @@ import Foundation
 
 /// One timed span of recognized speech from a single track, relative to that
 /// track's own start.
-struct TranscriptSegment: Sendable {
+struct TranscriptSegment: Sendable, Codable {
     let start: TimeInterval
     let end: TimeInterval
     let text: String
@@ -15,6 +15,18 @@ struct TranscriptSegment: Sendable {
         self.end = end
         self.text = text
         self.speaker = speaker
+    }
+}
+
+/// An engine transport or process failure does not establish that a track is
+/// bad. Leave its session pending instead of completing a partial transcript.
+enum TranscriptionInfrastructureError: Error, CustomStringConvertible {
+    case workerFailed(String)
+
+    var description: String {
+        switch self {
+        case .workerFailed(let message): return message
+        }
     }
 }
 

@@ -33,6 +33,10 @@ transcript with no file shuffling or cloud transcription dependency.
 7. Native notification and tray fallback are mutually exclusive. Finder and
    copy-path actions target the immutable `transcript.md` inside the exact
    completed session, never the mutable `latest-transcript.md` projection.
+8. The tray never loads ASR models. A local child process serves both tracks
+   and consecutive queued sessions; the coordinator closes and reaps it before
+   publishing idle. A model cleanup call alone does not bound idle memory on
+   macOS 14. See `docs/memory.md` for the reproduction and checks.
 
 ## Product boundaries
 
