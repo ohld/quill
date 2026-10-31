@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Keep recording the microphone across route changes (Bluetooth headset
+  connect/drop, default input switch): a stall watchdog restarts capture,
+  resamples the new route into the same file and pads the gap so mic
+  timestamps stay aligned. Previously the mic track stopped for the rest of
+  the session. An empty mic track is now logged at stop.
 - Release native speech-recognition memory when the queue drains by running
   Parakeet in a local worker process shared by both audio tracks.
 - Fix an owned Core Audio string leak in the idle call detector.
