@@ -52,6 +52,8 @@ cp "${REPO_DIR}/.build/checkouts/FluidAudio/ThirdPartyLicenses/fastcluster-LICEN
     "${LICENSE_DIR}/fastcluster-BSD-2-Clause.md"
 cp "${REPO_DIR}/.build/checkouts/FluidAudio/ThirdPartyLicenses/vbx-LICENSE.md" \
     "${LICENSE_DIR}/VBx-Apache-2.0.md"
+cp "${REPO_DIR}/.build/checkouts/FluidAudio/ThirdPartyLicenses/NemoTextProcessing-LICENSE.md" \
+    "${LICENSE_DIR}/NemoTextProcessing-Apache-2.0.md"
 cp "${REPO_DIR}/.build/checkouts/swift-argument-parser/LICENSE.txt" \
     "${LICENSE_DIR}/Swift-Argument-Parser-Apache-2.0-with-Swift-exception.txt"
 cp "${REPO_DIR}/ThirdParty/Lucide-LICENSE.txt" \

@@ -9,7 +9,7 @@ let package = Package(
     platforms: [.macOS("14.2")],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
-        .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.7.0"),
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.17.5"),
     ],
     targets: [
         .executableTarget(
@@ -18,16 +18,15 @@ let package = Package(
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "FluidAudio", package: "FluidAudio"),
             ],
-            exclude: ["Info.plist"],
             linkerSettings: [
-                // Embed Info.plist into the binary so TCC can attribute the
-                // system-audio-capture permission to quill itself when it
-                // runs as a LaunchAgent (no .app bundle to carry a plist).
+                // Embed the app bundle's Info.plist into the binary too, so
+                // TCC attributes capture permissions to quill even when it
+                // runs outside Quill.app. One plist, one identity.
                 .unsafeFlags([
                     "-Xlinker", "-sectcreate",
                     "-Xlinker", "__TEXT",
                     "-Xlinker", "__info_plist",
-                    "-Xlinker", "Sources/quill/Info.plist",
+                    "-Xlinker", "Packaging/Info.plist",
                 ]),
             ]
         ),

@@ -1,7 +1,7 @@
 # Third-party notices
 
 This project is an independent fork of
-[`digimata/quill`](https://github.com/digimata/quill). The upstream MIT
+[`humanitas-labs/quill`](https://github.com/humanitas-labs/quill). The upstream MIT
 license and Andrew Jones's copyright notice are preserved in `LICENSE`.
 Fork changes remain available under the same MIT terms; copyright belongs to
 their respective contributors.
@@ -15,6 +15,7 @@ The installed application includes complete license texts under
 | FluidAudio | resolved by `Package.resolved` | Apache-2.0 | [FluidInference/FluidAudio](https://github.com/FluidInference/FluidAudio) |
 | fastcluster (via FluidAudio) | bundled by FluidAudio | BSD-2-Clause | [FluidAudio notice](https://github.com/FluidInference/FluidAudio/blob/main/ThirdPartyLicenses/fastcluster-LICENSE.md) |
 | VBx (via FluidAudio) | bundled by FluidAudio | Apache-2.0 | [FluidAudio notice](https://github.com/FluidInference/FluidAudio/blob/main/ThirdPartyLicenses/vbx-LICENSE.md) |
+| NemoTextProcessing (via FluidAudio) | bundled by FluidAudio | Apache-2.0 | [FluidAudio notice](https://github.com/FluidInference/FluidAudio/blob/main/ThirdPartyLicenses/NemoTextProcessing-LICENSE.md) |
 | Lucide `feather` icon | SVG path derived from Lucide/Feather | ISC and MIT | [lucide-icons/lucide](https://github.com/lucide-icons/lucide) |
 
 Speech-model notices are kept separately in `MODEL_NOTICES.md`.
