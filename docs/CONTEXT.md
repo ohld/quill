@@ -49,4 +49,4 @@ transcript with no file shuffling or cloud transcription dependency.
 - The current name and feather branding are acceptable only while the source
   and convenience binary are clearly labelled as an experimental community
   fork. Rebranding product namespaces remains a gate before distributing or
-  marketing an independent product; see `PUBLISHING.md` and `ROADMAP.md`.
+  marketing an independent product; see `docs/PUBLISHING.md` and `ROADMAP.md`.

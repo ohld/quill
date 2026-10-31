@@ -6,3 +6,6 @@ Copyright (c) 2026 Daniil Okhlopkov and contributors
 
 See LICENSE for the MIT license terms and THIRD_PARTY_NOTICES.md for bundled
 third-party software and icon attributions.
+
+The upstream repository moved from github.com/digimata/quill to
+github.com/humanitas-labs/quill; the original copyright notice is unchanged.

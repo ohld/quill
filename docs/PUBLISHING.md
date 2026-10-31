@@ -3,7 +3,7 @@
 ## Current decision
 
 Publish this repository as a clearly attributed GitHub fork of
-[`digimata/quill`](https://github.com/digimata/quill). Keep the Quill name and
+[`humanitas-labs/quill`](https://github.com/humanitas-labs/quill). Keep the Quill name and
 feather only while it is presented as an experimental community fork. Daniil
 Okhlopkov's changes remain under the upstream MIT license.
 

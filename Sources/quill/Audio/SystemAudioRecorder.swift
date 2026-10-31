@@ -38,7 +38,7 @@ final class SystemAudioRecorder {
     private var aggregateID = AudioObjectID(kAudioObjectUnknown)
     private var procID: AudioDeviceIOProcID?
     private var file: AVAudioFile?
-    private let queue = DispatchQueue(label: "com.digimata.quill.system-tap")
+    private let queue = DispatchQueue(label: "com.ohld.quill.system-tap")
     private var recording = false
     private var generation: UInt64 = 0
     private var capturedFirstBufferAt: Date?

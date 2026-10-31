@@ -51,7 +51,7 @@ file at `~/Recordings/latest-transcript.md`.
 
 ## Public fork and releases
 
-Current decision: publish this as a GitHub-network fork of `digimata/quill`
+Current decision: publish this as a GitHub-network fork of `humanitas-labs/quill`
 with a tested Apple Silicon archive. Keep the fork relationship, attribution,
 license notices, recording-consent warning, and signing status visible.
 

@@ -1,6 +1,6 @@
 # Quill — local multilingual meeting transcription for macOS
 
-An unofficial fork of [digimata/quill](https://github.com/digimata/quill),
+An unofficial fork of [humanitas-labs/quill](https://github.com/humanitas-labs/quill),
 adapted by [Daniil Okhlopkov](https://github.com/ohld) for Russian and
 multilingual calls.
 
@@ -10,7 +10,7 @@ recognition stay on your Mac.
 
 [Download Quill for Apple Silicon](https://github.com/ohld/quill/releases/latest/download/Quill-arm64.zip)
 · [Latest release](https://github.com/ohld/quill/releases/latest)
-· [Original project and technical README](https://github.com/digimata/quill)
+· [Original project and technical README](https://github.com/humanitas-labs/quill)
 
 ## What this fork adds
 
@@ -30,6 +30,15 @@ Requires **macOS 14.2+ on Apple Silicon**.
 3. Try to open Quill once. If macOS blocks it, open **System Settings → Privacy
    & Security**, scroll to Security, choose **Open Anyway**, then confirm **Open**.
 4. Allow Microphone, System Audio Recording, and Notifications when macOS asks.
+5. Optional: start Quill at login and check that capture works:
+
+   ```sh
+   /Applications/Quill.app/Contents/MacOS/quill install --launch-at-login
+   /Applications/Quill.app/Contents/MacOS/quill doctor
+   ```
+
+If you prefer the terminal to **Open Anyway**, remove the download quarantine
+flag instead: `xattr -dr com.apple.quarantine /Applications/Quill.app`.
 
 The public build is ad-hoc signed because this fork does not yet have an Apple
 Developer ID certificate. It is verified by CI but not notarized by Apple, so a
@@ -38,13 +47,26 @@ changes between releases, an update may also ask for capture permissions again.
 Future builds can become one-click installs with stable permissions once
 Developer ID signing and notarization are configured.
 
-To build from source instead:
+### Build from source
+
+Requires Swift 6 (Xcode or the Command Line Tools), macOS 14.2+, Apple Silicon.
 
 ```sh
-./Scripts/install-app.sh
+git clone https://github.com/ohld/quill.git && cd quill && ./Scripts/install-app.sh
 ```
 
-This installs `~/Applications/Quill.app` and registers it to launch at login.
+This builds a release binary, installs `~/Applications/Quill.app`, registers it
+to launch at login, and runs `quill doctor`.
+
+### Uninstall
+
+```sh
+/Applications/Quill.app/Contents/MacOS/quill install --uninstall
+rm -rf /Applications/Quill.app ~/.config/quill
+```
+
+Use `~/Applications/Quill.app` for a source build. Recordings in `~/Recordings`
+are left alone; delete them yourself if you no longer need them.
 
 ## Use
 
@@ -82,10 +104,15 @@ Create `~/.config/quill/config.json` only if you want to change defaults:
 ```json
 {
   "recordings_dir": "~/Recordings",
-  "speaker_names": { "mic": "Dan", "system": "Remote" },
-  "transcript_echo_filter": true
+  "speaker_names": { "mic": "Alice", "system": "Remote" },
+  "transcript_echo_filter": true,
+  "on_stop": "~/bin/notes-hook"
 }
 ```
+
+`on_stop` is a shell command run after each session's transcript is written
+(or right after recording when transcription is disabled). Quill appends the
+session folder as its only argument, e.g. `~/bin/notes-hook ~/Recordings/2026.08.24-1530`.
 
 ## Notes
 
@@ -107,4 +134,8 @@ respective contributors. See [COPYRIGHT](COPYRIGHT),
 Quill is an experimental community fork, not an official release of the original
 project and not affiliated with Andrew Jones, NVIDIA, FluidInference, Lucide, or
 other products using the Quill name. For the original architecture and technical
-background, read the [upstream README](https://github.com/digimata/quill#readme).
+background, read the [upstream README](https://github.com/humanitas-labs/quill#readme).
+
+---
+
+Made by [Daniil Okhlopkov](https://okhlopkov.com)

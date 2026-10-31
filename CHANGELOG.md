@@ -1,12 +1,29 @@
 # Changelog
 
-## Unreleased
+## [0.1.1] - 2026-10-31
 
+### Fixed
+
+- Fix garbled or doubled words at 15-second window overlaps in long
+  transcripts by updating FluidAudio to 0.18 (Parakeet TDT v3 unchanged).
+- Finalize the mic file before stopping the audio engine, so a blocking
+  engine stop can no longer leave the mic track unfinalized.
 - Keep recording the microphone across route changes (Bluetooth headset
   connect/drop, default input switch): a stall watchdog restarts capture,
   resamples the new route into the same file and pads the gap so mic
   timestamps stay aligned. Previously the mic track stopped for the rest of
   the session. An empty mic track is now logged at stop.
+
+### Changed
+
+- Add a "Made by okhlopkov.com" menu item and capitalize "Quit Quill".
+- Use one Info.plist for the app bundle and the embedded binary identity.
+- README: terminal install, `quill doctor`, uninstall, build-from-source
+  requirements and the `on_stop` hook. Upstream links now point to
+  humanitas-labs/quill; publishing notes moved to `docs/`.
+
+### Transcription worker
+
 - Release native speech-recognition memory when the queue drains by running
   Parakeet in a local worker process shared by both audio tracks.
 - Fix an owned Core Audio string leak in the idle call detector.

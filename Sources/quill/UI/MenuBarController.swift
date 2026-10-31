@@ -76,14 +76,21 @@ final class MenuBarController {
 
         menu.addItem(.separator())
 
+        let madeBy = NSMenuItem(
+            title: "Made by okhlopkov.com",
+            action: #selector(madeByClicked),
+            keyEquivalent: ""
+        )
+        menu.addItem(madeBy)
+
         let quit = NSMenuItem(
-            title: "Quit quill",
+            title: "Quit Quill",
             action: #selector(quitClicked),
             keyEquivalent: "q"
         )
         menu.addItem(quit)
 
-        for item in [toggleItem, openFolder, copyLatestTranscriptPath, quit] {
+        for item in [toggleItem, openFolder, copyLatestTranscriptPath, madeBy, quit] {
             item.target = self
         }
 
@@ -286,6 +293,10 @@ final class MenuBarController {
     @objc private func toggleClicked() { onToggle?() }
     @objc private func openFolderClicked() { onOpenFolder?() }
     @objc private func copyLatestTranscriptPathClicked() { onCopyLastTranscriptPath?() }
+    @objc private func madeByClicked() {
+        NSWorkspace.shared.open(URL(string: "https://okhlopkov.com")!)
+    }
+
     @objc private func quitClicked() { onQuit?() }
 }
 
