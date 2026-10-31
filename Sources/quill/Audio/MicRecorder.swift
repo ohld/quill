@@ -104,12 +104,14 @@ final class MicRecorder: @unchecked Sendable {
         generation &+= 1
         watchdog?.cancel()
         watchdog = nil
-        engine.stop()
-        engine.inputNode.removeTap(onBus: 0)
-        // No tap can be writing here: an existing writer had to release the
-        // same lock before stop acquired it, and new callbacks use try().
+        // Finalize the file before touching the engine so a blocking
+        // engine.stop() can't leave it unfinalized. No tap can be writing
+        // here: an existing writer had to release the same lock before stop
+        // acquired it, and new callbacks use try() and see recording == false.
         writer = nil
         url = nil
+        engine.stop()
+        engine.inputNode.removeTap(onBus: 0)
         if capturedFirstBufferAt == nil {
             FileHandle.standardError.write(Data(
                 "warning: mic delivered no audio this session — mic track is empty\n".utf8
